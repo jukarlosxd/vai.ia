@@ -1438,11 +1438,11 @@ async function runChat({ prompt, slug, sessionId }) {
   const safeSlug = (slug || "demo").toString().toLowerCase().trim();
 
   // --- anti-repeat / anti-loop guard ---
-const sess = getSession\(sessionId\);\n  sess._repeat = const sess = getSession\(sessionId\);\n  sess._repeat || { last: "", count: 0 };
+sess._repeat = sess._repeat || { last: "", count: 0 };
 
 const cleanPrompt = (prompt || "").trim().toLowerCase();
-if (cleanPrompt && cleanPrompt === const sess = getSession\(sessionId\);\n  sess._repeat.last) const sess = getSession\(sessionId\);\n  sess._repeat.count += 1;
-else { const sess = getSession\(sessionId\);\n  sess._repeat.last = cleanPrompt; const sess = getSession\(sessionId\);\n  sess._repeat.count = 0; }
+if (cleanPrompt && cleanPrompt === sess._repeat.last) sess._repeat.count += 1;
+else { sess._repeat.last = cleanPrompt; sess._repeat.count = 0; }
 
 function isPriceQuestion(t="") {
   const s = t.toLowerCase();
@@ -2125,7 +2125,7 @@ if (isGreeting) {
     }
 
     // Si el usuario repite lo mismo muchas veces, corta el loop y dirige a acciÃ³n
-if (const sess = getSession\(sessionId\);\n  sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
+if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
   const isES = (sess.lang || detectLang(prompt) || "es") === "es";
   return {
     reply: isES
@@ -2359,6 +2359,7 @@ const PORT = process.env.PORT || 3100;
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
+
 
 
 

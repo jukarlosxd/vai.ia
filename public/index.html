@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VAI.ia — Intelligent Virtual Assistant</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+
+/* Shiny text animation */
+@keyframes shine {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.shiny-text {
+  background: linear-gradient(100deg, #64CEFB 0%, #64CEFB 30%, #ffffff 45%, #ffffff 55%, #64CEFB 70%, #64CEFB 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 3s linear infinite;
+}
+
+/* Nav pill */
+.nav-pill { border: 1px solid rgb(55 65 81); border-radius: 9999px; }
+
+/* Mobile menu */
+#mobile-menu { display: none; }
+#mobile-menu.open { display: flex; }
+
+/* Arrow hover */
+.arrow-group:hover .arrow-icon { transform: translateX(4px); }
+.arrow-icon { transition: transform 0.2s ease; }
+
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+
+/* Section fade in */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reveal { opacity: 0; transform: translateY(30px); transition: opacity .7s ease, transform .7s ease; }
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* Marquee */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee-track { animation: marquee 25s linear infinite; }
+
+/* Chat bubble */
+.chat-bubble-btn {
+  position: fixed; bottom: 28px; right: 28px; z-index: 1000;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  border: none; cursor: pointer; box-shadow: 0 8px 32px rgba(99,102,241,.5);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .2s, box-shadow .2s;
+}
+.chat-bubble-btn:hover { transform: scale(1.08); box-shadow: 0 12px 40px rgba(99,102,241,.7); }
+
+.chat-panel {
+  position: fixed; bottom: 100px; right: 28px; z-index: 1000;
+  width: 360px; background: #0f0f1a;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 20px; box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  display: none; flex-direction: column; overflow: hidden;
+  max-height: 520px;
+}
+.chat-panel.open { display: flex; }
+
+.chat-header {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  padding: 16px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 320px;
+}
+.chat-messages::-webkit-scrollbar { width: 4px; }
+.chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+
+.msg-bot {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px 14px 14px 4px;
+  padding: 10px 14px; font-size: 13px; color: #e2e8f0; line-height: 1.5;
+  max-width: 85%; align-self: flex-start;
+}
+.msg-user {
+  background: linear-gradient(135deg,#3b82f6,#6366f1);
+  border-radius: 14px 14px 4px 14px;
+  padding: 10px 14px; font-size: 13px; color: #fff; line-height: 1.5;
+  max-width: 85%; align-self: flex-end;
+}
+.chat-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255,255,255,.06);
+  display: flex; gap: 8px;
+}
+.chat-input {
+  flex: 1; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px; padding: 9px 12px; color: #fff; font-size: 13px;
+  outline: none; font-family: 'Inter', sans-serif;
+}
+.chat-input::placeholder { color: rgba(255,255,255,.3); }
+.chat-send {
+  background: linear-gradient(135deg,#3b82f6,#6366f1);
+  border: none; border-radius: 10px; padding: 9px 14px;
+  color: #fff; font-size: 13px; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: opacity .2s;
+}
+.chat-send:hover { opacity: .85; }
+
+/* Welcome popup */
+.welcome-popup {
+  position: fixed; bottom: 100px; right: 28px; z-index: 999;
+  background: #0f0f1a; border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px; padding: 20px; width: 300px;
+  box-shadow: 0 16px 60px rgba(0,0,0,.5);
+  animation: slideUp .4s ease;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.welcome-popup.hidden { display: none; }
+
+/* Sections */
+.section-dark { background: #07060f; }
+.section-darker { background: #050408; }
+.card-glass {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+}
+
+/* Nav active */
+.nav-active { color: white !important; }
+
+/* Form inputs */
+.form-input {
+  width: 100%; background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
+  padding: 12px 16px; color: #fff; font-size: 15px;
+  font-family: 'Inter', sans-serif; outline: none; transition: border-color .2s;
+}
+.form-input:focus { border-color: rgba(99,102,241,.5); }
+.form-input::placeholder { color: rgba(255,255,255,.3); }
+textarea.form-input { resize: vertical; min-height: 120px; }
+
+/* Glow orb */
+.glow-orb {
+  position: absolute; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(99,102,241,.15) 0%, transparent 65%);
+}
+</style>
+</head>
+<body class="bg-black text-white overflow-x-hidden">
+
+<!-- ========== HERO SECTION ========== -->
+<section id="home" class="relative h-screen w-full overflow-hidden">
+  <video autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover">
+    <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_105406_16f4600d-7a92-4292-b96e-b19156c7830a.mp4" type="video/mp4">
+  </video>
+  <div class="absolute inset-0 bg-black/45"></div>
+
+  <div class="relative z-10 h-full flex flex-col max-w-7xl mx-auto px-6 md:px-10 py-6">
+
+    <!-- NAVBAR -->
+    <nav class="flex items-center justify-between w-full">
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <div class="relative w-9 h-9 rounded-full border-2 border-white flex items-center justify-center">
+          <div class="w-4 h-4 rounded-full bg-white"></div>
+        </div>
+        <span class="text-white font-semibold text-base tracking-tight">VAI<span class="text-blue-300">.ia</span></span>
+      </div>
+
+      <div class="hidden lg:flex items-center nav-pill px-3 py-1.5 gap-0.5">
+        <a href="#home"     class="nav-link text-white/80 hover:text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/5 transition-all" data-en="Home"     data-es="Inicio">Home</a>
+        <a href="#about"    class="nav-link text-white/80 hover:text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/5 transition-all" data-en="About"    data-es="Nosotros">About</a>
+        <a href="#channels" class="nav-link text-white/80 hover:text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/5 transition-all" data-en="Channels"  data-es="Canales">Channels</a>
+        <a href="#demo"     class="nav-link text-white/80 hover:text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/5 transition-all" data-en="Demo"     data-es="Demo">Demo</a>
+        <a href="#blog"     class="nav-link text-white/80 hover:text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/5 transition-all" data-en="Blog"     data-es="Blog">Blog</a>
+        <a href="#contact"  class="nav-link text-white/80 hover:text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/5 transition-all" data-en="Contact"   data-es="Contacto">Contact</a>
+        <a href="/login"    class="nav-link text-white/80 hover:text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/5 transition-all flex items-center gap-1" data-en="Dashboard" data-es="Panel">
+          Dashboard <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <button onclick="toggleLang()" id="lang-btn" class="ml-1 text-white/50 hover:text-white text-xs px-3 py-1.5 rounded-full border border-white/20 hover:border-white/40 transition-all font-mono tracking-wider">ES</button>
+      </div>
+
+      <div class="flex items-center gap-3 lg:hidden">
+        <button onclick="toggleLang()" id="lang-btn-m" class="text-white/50 hover:text-white text-xs px-2.5 py-1.5 rounded-full border border-white/20 font-mono">ES</button>
+        <button id="hamburger" class="text-white/80 hover:text-white">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Mobile menu -->
+    <div id="mobile-menu" class="lg:hidden flex-col gap-1 mt-4 bg-black/85 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+      <a href="#home"     class="block text-white/80 hover:text-white text-sm py-2 px-3 rounded-xl hover:bg-white/5 transition-all" data-en="Home"      data-es="Inicio">Home</a>
+      <a href="#about"    class="block text-white/80 hover:text-white text-sm py-2 px-3 rounded-xl hover:bg-white/5 transition-all" data-en="About"     data-es="Nosotros">About</a>
+      <a href="#channels" class="block text-white/80 hover:text-white text-sm py-2 px-3 rounded-xl hover:bg-white/5 transition-all" data-en="Channels"  data-es="Canales">Channels</a>
+      <a href="#demo"     class="block text-white/80 hover:text-white text-sm py-2 px-3 rounded-xl hover:bg-white/5 transition-all" data-en="Demo"      data-es="Demo">Demo</a>
+      <a href="#blog"     class="block text-white/80 hover:text-white text-sm py-2 px-3 rounded-xl hover:bg-white/5 transition-all" data-en="Blog"      data-es="Blog">Blog</a>
+      <a href="#contact"  class="block text-white/80 hover:text-white text-sm py-2 px-3 rounded-xl hover:bg-white/5 transition-all" data-en="Contact"   data-es="Contacto">Contact</a>
+      <a href="/login"    class="block text-white/80 hover:text-white text-sm py-2 px-3 rounded-xl hover:bg-white/5 transition-all" data-en="Dashboard"  data-es="Panel">Dashboard</a>
+    </div>
+
+    <!-- Two-col text -->
+    <div class="flex flex-col lg:flex-row lg:justify-between mt-8 lg:mt-10 gap-4">
+      <p class="text-white/80 text-sm md:text-base max-w-sm leading-relaxed"
+         data-en="We automate customer service with AI that schedules, responds, and never rests — for businesses ready to scale."
+         data-es="Automatizamos la atención al cliente con IA que agenda, responde y nunca descansa.">
+        We automate customer service with AI that schedules, responds, and never rests — for businesses ready to scale.
+      </p>
+      <p class="text-white/80 text-sm md:text-base lg:text-right max-w-xs leading-relaxed"
+         data-en="500+ businesses already serving clients 24/7 →"
+         data-es="+500 negocios atendiendo clientes 24/7 →">
+        500+ businesses already serving clients 24/7 →
+      </p>
+    </div>
+
+    <!-- Hero center -->
+    <div class="flex-1 flex flex-col items-center justify-center text-center -mt-8">
+      <p class="text-white/70 text-xs md:text-sm tracking-tight uppercase mb-6"
+         data-en="Your intelligent assistant · Available now"
+         data-es="Tu asistente inteligente · Disponible ahora">
+        Your intelligent assistant · Available now
+      </p>
+      <h1 class="leading-[0.85] tracking-tighter">
+        <span class="block text-white font-medium text-5xl sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl"
+              data-en="Serve better," data-es="Atiende mejor,">Serve better,</span>
+        <span class="block shiny-text font-medium text-5xl sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl mt-1"
+              data-en="never stop." data-es="sin parar.">never stop.</span>
+      </h1>
+      <div class="mt-10 md:mt-14">
+        <a href="#contact" class="arrow-group inline-flex items-center gap-2 bg-black hover:bg-gray-900 text-white text-sm md:text-base font-medium rounded-full px-6 md:px-8 py-3 md:py-4 transition-all border border-white/10"
+           data-en="Get started free with VAI.ia" data-es="Empieza gratis con VAI.ia">
+          Get started free with VAI.ia
+          <svg class="arrow-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== ABOUT ========== -->
+<section id="about" class="section-dark py-32 px-6 md:px-10 relative overflow-hidden">
+  <div class="glow-orb w-96 h-96 -top-32 -left-32"></div>
+  <div class="max-w-6xl mx-auto">
+    <div class="reveal text-center mb-20">
+      <p class="text-blue-400 text-xs tracking-widest uppercase mb-4" data-en="About VAI.ia" data-es="Sobre VAI.ia">About VAI.ia</p>
+      <h2 class="text-4xl md:text-6xl font-light leading-tight mb-6" style="font-family:'Inter',sans-serif;letter-spacing:-.03em">
+        <span data-en="The AI receptionist" data-es="La recepcionista IA">The AI receptionist</span><br>
+        <span class="text-white/40" data-en="your business needs." data-es="que tu negocio necesita.">your business needs.</span>
+      </h2>
+      <p class="text-white/50 text-lg max-w-2xl mx-auto leading-relaxed"
+         data-en="VAI.ia is an intelligent virtual assistant that handles all your customer communication — booking appointments, answering questions, sending confirmations — across every channel, 24 hours a day."
+         data-es="VAI.ia es un asistente virtual inteligente que maneja toda tu comunicación con clientes — agenda citas, responde preguntas, envía confirmaciones — en todos los canales, 24 horas al día.">
+        VAI.ia is an intelligent virtual assistant that handles all your customer communication — booking appointments, answering questions, sending confirmations — across every channel, 24 hours a day.
+      </p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 reveal">
+      <div class="card-glass p-8">
+        <div class="text-4xl mb-4">🧠</div>
+        <h3 class="text-xl font-semibold mb-3" data-en="Trained on your business" data-es="Entrenada en tu negocio">Trained on your business</h3>
+        <p class="text-white/50 text-sm leading-relaxed" data-en="Load your services, prices, hours and policies. The AI responds exactly as your best employee would." data-es="Carga tus servicios, precios, horarios y políticas. La IA responde igual que tu mejor empleado.">Load your services, prices, hours and policies. The AI responds exactly as your best employee would.</p>
+      </div>
+      <div class="card-glass p-8">
+        <div class="text-4xl mb-4">⚡</div>
+        <h3 class="text-xl font-semibold mb-3" data-en="Responds in &lt;2 seconds" data-es="Responde en &lt;2 segundos">Responds in &lt;2 seconds</h3>
+        <p class="text-white/50 text-sm leading-relaxed" data-en="No waiting. No missed messages. Every client gets an instant, intelligent response at any time of day." data-es="Sin esperas. Sin mensajes perdidos. Cada cliente recibe una respuesta inmediata e inteligente a cualquier hora.">No waiting. No missed messages. Every client gets an instant, intelligent response at any time of day.</p>
+      </div>
+      <div class="card-glass p-8">
+        <div class="text-4xl mb-4">📅</div>
+        <h3 class="text-xl font-semibold mb-3" data-en="Books appointments automatically" data-es="Agenda citas automáticamente">Books appointments automatically</h3>
+        <p class="text-white/50 text-sm leading-relaxed" data-en="Checks availability, books the slot, sends email confirmations and reminders. Zero manual work." data-es="Revisa disponibilidad, reserva el espacio, envía confirmaciones y recordatorios. Cero trabajo manual.">Checks availability, books the slot, sends email confirmations and reminders. Zero manual work.</p>
+      </div>
+    </div>
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-10 reveal">
+      <div class="text-center p-6 card-glass">
+        <div class="text-4xl font-light mb-2" style="font-family:'Inter',sans-serif">24/7</div>
+        <div class="text-white/40 text-sm" data-en="Always available" data-es="Siempre disponible">Always available</div>
+      </div>
+      <div class="text-center p-6 card-glass">
+        <div class="text-4xl font-light mb-2">&lt;2s</div>
+        <div class="text-white/40 text-sm" data-en="Response time" data-es="Tiempo de respuesta">Response time</div>
+      </div>
+      <div class="text-center p-6 card-glass">
+        <div class="text-4xl font-light mb-2">500+</div>
+        <div class="text-white/40 text-sm" data-en="Active businesses" data-es="Negocios activos">Active businesses</div>
+      </div>
+      <div class="text-center p-6 card-glass">
+        <div class="text-4xl font-light mb-2">∞</div>
+        <div class="text-white/40 text-sm" data-en="Simultaneous chats" data-es="Chats simultáneos">Simultaneous chats</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== CHANNELS ========== -->
+<section id="channels" class="section-darker py-32 px-6 md:px-10 relative overflow-hidden">
+  <div class="glow-orb w-80 h-80 top-0 right-0"></div>
+  <div class="max-w-6xl mx-auto">
+    <div class="reveal text-center mb-20">
+      <p class="text-blue-400 text-xs tracking-widest uppercase mb-4" data-en="Integrations" data-es="Integraciones">Integrations</p>
+      <h2 class="text-4xl md:text-6xl font-light leading-tight mb-6" style="letter-spacing:-.03em">
+        <span data-en="One AI," data-es="Una IA,">One AI,</span><br>
+        <span class="text-white/40" data-en="every channel." data-es="todos los canales.">every channel.</span>
+      </h2>
+      <p class="text-white/50 text-lg max-w-xl mx-auto" data-en="Connect all your communication channels with a single click." data-es="Conecta todos tus canales de comunicación con un solo click.">Connect all your communication channels with a single click.</p>
+    </div>
+
+    <!-- Marquee -->
+    <div class="overflow-hidden mb-16 reveal">
+      <div class="flex marquee-track" style="width:max-content">
+        <div class="flex gap-12 pr-12">
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-green-500/20 border border-green-500/30 flex items-center justify-center text-green-400 text-sm font-bold">W</div><span class="text-white/60 font-medium">WhatsApp</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 text-sm font-bold">S</div><span class="text-white/60 font-medium">SMS</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-pink-500/20 border border-pink-500/30 flex items-center justify-center text-pink-400 text-sm font-bold">I</div><span class="text-white/60 font-medium">Instagram</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-600/30 flex items-center justify-center text-blue-400 text-sm font-bold">F</div><span class="text-white/60 font-medium">Facebook</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 text-sm font-bold">✉</div><span class="text-white/60 font-medium">Email</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-sm font-bold">☎</div><span class="text-white/60 font-medium">Voice Calls</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-sm font-bold">W</div><span class="text-white/60 font-medium">Web Chat</span></div>
+        </div>
+        <div class="flex gap-12 pr-12">
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-green-500/20 border border-green-500/30 flex items-center justify-center text-green-400 text-sm font-bold">W</div><span class="text-white/60 font-medium">WhatsApp</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 text-sm font-bold">S</div><span class="text-white/60 font-medium">SMS</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-pink-500/20 border border-pink-500/30 flex items-center justify-center text-pink-400 text-sm font-bold">I</div><span class="text-white/60 font-medium">Instagram</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-600/30 flex items-center justify-center text-blue-400 text-sm font-bold">F</div><span class="text-white/60 font-medium">Facebook</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 text-sm font-bold">✉</div><span class="text-white/60 font-medium">Email</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-sm font-bold">☎</div><span class="text-white/60 font-medium">Voice Calls</span></div>
+          <div class="flex items-center gap-3 whitespace-nowrap"><div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-sm font-bold">W</div><span class="text-white/60 font-medium">Web Chat</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 reveal">
+      <div class="card-glass p-6 flex gap-4">
+        <div class="w-12 h-12 rounded-xl bg-green-500/15 border border-green-500/25 flex items-center justify-center text-2xl flex-shrink-0">💬</div>
+        <div><h3 class="font-semibold mb-1">WhatsApp</h3><p class="text-white/45 text-sm leading-relaxed" data-en="Connect via Twilio WhatsApp API. One number, unlimited clients." data-es="Conecta vía Twilio WhatsApp API. Un número, clientes ilimitados.">Connect via Twilio WhatsApp API. One number, unlimited clients.</p></div>
+      </div>
+      <div class="card-glass p-6 flex gap-4">
+        <div class="w-12 h-12 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center text-2xl flex-shrink-0">📱</div>
+        <div><h3 class="font-semibold mb-1">SMS</h3><p class="text-white/45 text-sm leading-relaxed" data-en="Classic SMS that reaches any phone. No app required for your customers." data-es="SMS clásico que llega a cualquier teléfono. Sin app para tus clientes.">Classic SMS that reaches any phone. No app required for your customers.</p></div>
+      </div>
+      <div class="card-glass p-6 flex gap-4">
+        <div class="w-12 h-12 rounded-xl bg-pink-500/15 border border-pink-500/25 flex items-center justify-center text-2xl flex-shrink-0">📸</div>
+        <div><h3 class="font-semibold mb-1">Instagram DM</h3><p class="text-white/45 text-sm leading-relaxed" data-en="Auto-reply to DMs on your business profile. Never miss a potential client." data-es="Responde automáticamente DMs en tu perfil de negocio.">Auto-reply to DMs on your business profile. Never miss a potential client.</p></div>
+      </div>
+      <div class="card-glass p-6 flex gap-4">
+        <div class="w-12 h-12 rounded-xl bg-blue-600/15 border border-blue-600/25 flex items-center justify-center text-2xl flex-shrink-0">📘</div>
+        <div><h3 class="font-semibold mb-1">Facebook Messenger</h3><p class="text-white/45 text-sm leading-relaxed" data-en="Respond to Facebook messages instantly with full AI capability." data-es="Responde mensajes de Facebook al instante con toda la capacidad de la IA.">Respond to Facebook messages instantly with full AI capability.</p></div>
+      </div>
+      <div class="card-glass p-6 flex gap-4">
+        <div class="w-12 h-12 rounded-xl bg-purple-500/15 border border-purple-500/25 flex items-center justify-center text-2xl flex-shrink-0">✉️</div>
+        <div><h3 class="font-semibold mb-1">Email</h3><p class="text-white/45 text-sm leading-relaxed" data-en="Confirmation emails, reminders 24h and 2h before every appointment." data-es="Emails de confirmación, recordatorios 24h y 2h antes de cada cita.">Confirmation emails, reminders 24h and 2h before every appointment.</p></div>
+      </div>
+      <div class="card-glass p-6 flex gap-4">
+        <div class="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center text-2xl flex-shrink-0">📞</div>
+        <div><h3 class="font-semibold mb-1" data-en="Voice Calls" data-es="Llamadas de voz">Voice Calls</h3><p class="text-white/45 text-sm leading-relaxed" data-en="AI answers calls via Twilio Voice. Clients speak, the AI understands and books." data-es="La IA responde llamadas vía Twilio Voice. Los clientes hablan, la IA entiende y agenda.">AI answers calls via Twilio Voice. Clients speak, the AI understands and books.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== DEMO ========== -->
+<section id="demo" class="section-dark py-32 px-6 md:px-10">
+  <div class="max-w-4xl mx-auto">
+    <div class="reveal text-center mb-16">
+      <p class="text-blue-400 text-xs tracking-widest uppercase mb-4" data-en="Live Demo" data-es="Demo en Vivo">Live Demo</p>
+      <h2 class="text-4xl md:text-6xl font-light leading-tight mb-6" style="letter-spacing:-.03em">
+        <span data-en="See VAI.ia in action" data-es="Ve VAI.ia en acción">See VAI.ia in action</span>
+      </h2>
+      <p class="text-white/50 text-lg" data-en="Chat with a live demo of the assistant below." data-es="Habla con una demo en vivo del asistente abajo.">Chat with a live demo of the assistant below.</p>
+    </div>
+    <div class="card-glass overflow-hidden reveal">
+      <div class="bg-gradient-to-r from-blue-600/20 to-indigo-600/20 border-b border-white/5 px-6 py-4 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-sm font-bold">V</div>
+        <div>
+          <div class="font-semibold text-sm">VAI.ia Assistant</div>
+          <div class="text-white/40 text-xs flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span> <span data-en="Online · Demo Mode" data-es="En línea · Modo Demo">Online · Demo Mode</span></div>
+        </div>
+      </div>
+      <div class="p-6 flex flex-col gap-4 min-h-64" id="demoMessages">
+        <div class="flex gap-3 max-w-xs">
+          <div class="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold flex-shrink-0">V</div>
+          <div class="bg-white/5 border border-white/8 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-white/80 leading-relaxed demo-greeting">
+            Hi! 👋 I'm VAI.ia, your intelligent virtual assistant. I can book appointments, answer questions, and handle your clients 24/7. Want to see how it works?
+          </div>
+        </div>
+      </div>
+      <div class="border-t border-white/5 px-4 py-3 flex gap-3">
+        <input id="demoInput" type="text" class="form-input text-sm py-2.5" placeholder="Try: 'I want to book an appointment'..." onkeydown="if(event.key==='Enter')sendDemo()">
+        <button onclick="sendDemo()" class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium rounded-xl px-4 py-2.5 hover:opacity-90 transition-opacity whitespace-nowrap">
+          Send →
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== BLOG ========== -->
+<section id="blog" class="section-darker py-32 px-6 md:px-10">
+  <div class="max-w-6xl mx-auto">
+    <div class="reveal text-center mb-16">
+      <p class="text-blue-400 text-xs tracking-widest uppercase mb-4">Blog</p>
+      <h2 class="text-4xl md:text-6xl font-light leading-tight" style="letter-spacing:-.03em">
+        <span data-en="Insights &amp; Updates" data-es="Ideas y Actualizaciones">Insights &amp; Updates</span>
+      </h2>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 reveal">
+      <article class="card-glass overflow-hidden group cursor-pointer">
+        <div class="h-48 bg-gradient-to-br from-blue-600/20 to-indigo-600/20 flex items-center justify-center text-5xl">🤖</div>
+        <div class="p-6">
+          <div class="text-blue-400 text-xs uppercase tracking-wider mb-3" data-en="AI & Automation" data-es="IA y Automatización">AI & Automation</div>
+          <h3 class="font-semibold text-base mb-3 group-hover:text-blue-300 transition-colors" data-en="How AI is transforming appointment booking in 2026" data-es="Cómo la IA está transformando el agendamiento de citas en 2026">How AI is transforming appointment booking in 2026</h3>
+          <p class="text-white/40 text-sm leading-relaxed" data-en="Businesses that use AI assistants for scheduling see up to 40% more bookings and near-zero no-shows." data-es="Los negocios que usan asistentes IA para agendar ven hasta 40% más reservas.">Businesses that use AI assistants for scheduling see up to 40% more bookings and near-zero no-shows.</p>
+          <div class="mt-4 text-white/30 text-xs">Apr 2026</div>
+        </div>
+      </article>
+      <article class="card-glass overflow-hidden group cursor-pointer">
+        <div class="h-48 bg-gradient-to-br from-green-600/20 to-teal-600/20 flex items-center justify-center text-5xl">💬</div>
+        <div class="p-6">
+          <div class="text-green-400 text-xs uppercase tracking-wider mb-3" data-en="WhatsApp Business" data-es="WhatsApp Business">WhatsApp Business</div>
+          <h3 class="font-semibold text-base mb-3 group-hover:text-green-300 transition-colors" data-en="WhatsApp: the #1 channel for customer service in Latin America" data-es="WhatsApp: el canal #1 para atención al cliente en Latinoamérica">WhatsApp: the #1 channel for customer service in Latin America</h3>
+          <p class="text-white/40 text-sm leading-relaxed" data-en="98% open rate. 3x faster response than email. Learn why WhatsApp is essential for your business." data-es="98% tasa de apertura. 3x más rápido que el email. Por qué WhatsApp es esencial.">98% open rate. 3x faster response than email. Learn why WhatsApp is essential for your business.</p>
+          <div class="mt-4 text-white/30 text-xs">Mar 2026</div>
+        </div>
+      </article>
+      <article class="card-glass overflow-hidden group cursor-pointer">
+        <div class="h-48 bg-gradient-to-br from-purple-600/20 to-pink-600/20 flex items-center justify-center text-5xl">📊</div>
+        <div class="p-6">
+          <div class="text-purple-400 text-xs uppercase tracking-wider mb-3" data-en="Case Study" data-es="Caso de Estudio">Case Study</div>
+          <h3 class="font-semibold text-base mb-3 group-hover:text-purple-300 transition-colors" data-en="How a barbershop went from 20 to 80 weekly bookings with VAI.ia" data-es="Cómo una barbería pasó de 20 a 80 reservas semanales con VAI.ia">How a barbershop went from 20 to 80 weekly bookings with VAI.ia</h3>
+          <p class="text-white/40 text-sm leading-relaxed" data-en="A real story of automation that changed everything for a small business." data-es="La historia real de automatización que lo cambió todo para un negocio pequeño.">A real story of automation that changed everything for a small business.</p>
+          <div class="mt-4 text-white/30 text-xs">Feb 2026</div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ========== CONTACT ========== -->
+<section id="contact" class="section-dark py-32 px-6 md:px-10 relative overflow-hidden">
+  <div class="glow-orb w-96 h-96 bottom-0 left-1/2 -translate-x-1/2"></div>
+  <div class="max-w-3xl mx-auto relative z-10">
+    <div class="reveal text-center mb-16">
+      <p class="text-blue-400 text-xs tracking-widest uppercase mb-4" data-en="Get Started" data-es="Comenzar">Get Started</p>
+      <h2 class="text-4xl md:text-6xl font-light leading-tight mb-6" style="letter-spacing:-.03em">
+        <span data-en="Ready to automate" data-es="¿Listo para automatizar">Ready to automate</span><br>
+        <span class="text-white/40" data-en="your business?" data-es="tu negocio?">your business?</span>
+      </h2>
+      <p class="text-white/50 text-lg" data-en="Fill out the form and we'll set everything up for you. Or email us directly at" data-es="Llena el formulario y nosotros configuramos todo por ti. O escríbenos directamente a">
+        Fill out the form and we'll set everything up for you. Or email us directly at
+      </p>
+      <a href="mailto:vai.virtualassitant@gmail.com" class="text-blue-400 hover:text-blue-300 transition-colors text-lg">vai.virtualassitant@gmail.com</a>
+    </div>
+
+    <div class="card-glass p-8 md:p-10 reveal">
+      <form id="contactForm" onsubmit="submitContact(event)">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+          <div>
+            <label class="block text-white/50 text-sm mb-2" data-en="Full name" data-es="Nombre completo">Full name</label>
+            <input type="text" id="cf_name" class="form-input" placeholder="John Smith" required>
+          </div>
+          <div>
+            <label class="block text-white/50 text-sm mb-2" data-en="Business email" data-es="Email del negocio">Business email</label>
+            <input type="email" id="cf_email" class="form-input" placeholder="john@mybusiness.com" required>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+          <div>
+            <label class="block text-white/50 text-sm mb-2" data-en="Business name" data-es="Nombre del negocio">Business name</label>
+            <input type="text" id="cf_business" class="form-input" placeholder="My Business">
+          </div>
+          <div>
+            <label class="block text-white/50 text-sm mb-2" data-en="Channels of interest" data-es="Canales de interés">Channels of interest</label>
+            <select id="cf_channel" class="form-input" style="cursor:pointer">
+              <option value="" style="background:#0f0f1a" data-en="Select a channel..." data-es="Selecciona un canal...">Select a channel...</option>
+              <option value="whatsapp" style="background:#0f0f1a">WhatsApp</option>
+              <option value="sms" style="background:#0f0f1a">SMS</option>
+              <option value="instagram" style="background:#0f0f1a">Instagram</option>
+              <option value="all" style="background:#0f0f1a" data-en="All channels" data-es="Todos los canales">All channels</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-6">
+          <label class="block text-white/50 text-sm mb-2" data-en="Tell us about your business" data-es="Cuéntanos sobre tu negocio">Tell us about your business</label>
+          <textarea id="cf_message" class="form-input" placeholder="What type of business do you have? How many clients per week?" data-placeholder-en="What type of business do you have? How many clients per week?" data-placeholder-es="¿Qué tipo de negocio tienes? ¿Cuántos clientes por semana?"></textarea>
+        </div>
+        <div id="contactSuccess" class="hidden mb-4 bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3 text-green-400 text-sm" data-en="✓ Message sent! We'll contact you within 24 hours." data-es="✓ ¡Mensaje enviado! Te contactaremos en 24 horas.">
+          ✓ Message sent! We'll contact you within 24 hours.
+        </div>
+        <button type="submit" class="w-full arrow-group flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 text-white font-semibold rounded-xl py-4 transition-all text-base">
+          <span data-en="Send message" data-es="Enviar mensaje">Send message</span>
+          <svg class="arrow-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ========== FOOTER ========== -->
+<footer class="section-darker border-t border-white/5 py-12 px-6 md:px-10">
+  <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full border-2 border-white/30 flex items-center justify-center"><div class="w-3.5 h-3.5 rounded-full bg-white/60"></div></div>
+      <span class="font-semibold">VAI<span class="text-blue-300">.ia</span></span>
+    </div>
+    <div class="flex flex-wrap justify-center gap-6 text-sm text-white/40">
+      <a href="#home" class="hover:text-white/70 transition-colors" data-en="Home" data-es="Inicio">Home</a>
+      <a href="#about" class="hover:text-white/70 transition-colors" data-en="About" data-es="Nosotros">About</a>
+      <a href="#channels" class="hover:text-white/70 transition-colors" data-en="Channels" data-es="Canales">Channels</a>
+      <a href="#demo" class="hover:text-white/70 transition-colors">Demo</a>
+      <a href="#blog" class="hover:text-white/70 transition-colors">Blog</a>
+      <a href="#contact" class="hover:text-white/70 transition-colors" data-en="Contact" data-es="Contacto">Contact</a>
+      <a href="/login" class="hover:text-white/70 transition-colors" data-en="Dashboard" data-es="Panel">Dashboard</a>
+      <a href="/client/login" class="hover:text-white/70 transition-colors" data-en="Client Login" data-es="Acceso Cliente">Client Login</a>
+    </div>
+    <div class="text-white/25 text-sm">© 2026 VAI.ia</div>
+  </div>
+</footer>
+
+<!-- ========== WELCOME POPUP ========== -->
+<div id="welcomePopup" class="welcome-popup">
+  <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold">V</div>
+      <div>
+        <div class="font-semibold text-sm">VAI.ia</div>
+        <div class="text-white/40 text-xs flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span> Online</div>
+      </div>
+    </div>
+    <button onclick="closeWelcome()" class="text-white/30 hover:text-white/60 transition-colors text-lg leading-none">✕</button>
+  </div>
+  <p class="text-white/70 text-sm leading-relaxed mb-4" id="welcomeMsg"
+     data-en="👋 Hi! Interested in automating your business with AI? We'd love to show you how VAI.ia works. Fill out the contact form or email us directly — we respond within 24 hours!"
+     data-es="👋 ¡Hola! ¿Interesado en automatizar tu negocio con IA? Nos encantaría mostrarte cómo funciona VAI.ia. ¡Llena el formulario de contacto o escríbenos!">
+    👋 Hi! Interested in automating your business with AI? We'd love to show you how VAI.ia works. Fill out the contact form or email us directly — we respond within 24 hours!
+  </p>
+  <a href="#contact" onclick="closeWelcome()" class="block w-full text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium rounded-xl py-2.5 hover:opacity-90 transition-opacity" data-en="Contact us →" data-es="Contáctanos →">Contact us →</a>
+</div>
+
+<!-- ========== CHAT BUBBLE ========== -->
+<button class="chat-bubble-btn" onclick="toggleChat()" id="chatBubbleBtn" title="Chat with VAI.ia">
+  <svg id="chatIcon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  <svg id="closeIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
+
+<!-- CHAT PANEL -->
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-header">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center font-bold">V</div>
+      <div>
+        <div class="font-semibold text-sm">VAI.ia Assistant</div>
+        <div class="text-white/60 text-xs flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-300 inline-block"></span> Online</div>
+      </div>
+    </div>
+    <button onclick="toggleChat()" class="text-white/60 hover:text-white transition-colors">✕</button>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="msg-bot" id="initMsg">Hi! 👋 I'm VAI.ia. I can answer questions about our service or help you get started. What would you like to know?</div>
+  </div>
+  <div class="chat-input-area">
+    <input type="text" class="chat-input" id="chatInputField" placeholder="Ask anything..." onkeydown="if(event.key==='Enter')sendChat()">
+    <button class="chat-send" onclick="sendChat()">→</button>
+  </div>
+</div>
+
+<script>
+// ---- LANGUAGE TOGGLE ----
+let lang = 'en';
+const translations = {
+  en: {
+    chatGreeting: "Hi! 👋 I'm VAI.ia. I can answer questions about our service or help you get started. What would you like to know?",
+    demoGreeting: "Hi! 👋 I'm VAI.ia, your intelligent virtual assistant. I can book appointments, answer questions, and handle your clients 24/7. Want to see how it works?",
+    chatPlaceholder: "Ask anything...",
+    demoChatPlaceholder: "Try: 'I want to book an appointment'...",
+  },
+  es: {
+    chatGreeting: "¡Hola! 👋 Soy VAI.ia. Puedo responder preguntas sobre nuestro servicio o ayudarte a comenzar. ¿Qué quieres saber?",
+    demoGreeting: "¡Hola! 👋 Soy VAI.ia, tu asistente virtual inteligente. Puedo agendar citas, responder preguntas y atender tus clientes 24/7. ¿Quieres ver cómo funciona?",
+    chatPlaceholder: "Pregunta lo que quieras...",
+    demoChatPlaceholder: "Prueba: 'Quiero agendar una cita'...",
+  }
+};
+
+function toggleLang() {
+  lang = lang === 'en' ? 'es' : 'en';
+  document.querySelectorAll('#lang-btn,#lang-btn-m').forEach(b => b.textContent = lang === 'en' ? 'ES' : 'EN');
+  document.querySelectorAll('[data-en]').forEach(el => {
+    const txt = el.getAttribute(`data-${lang}`);
+    if (!txt) return;
+    const svg = el.querySelector('svg');
+    if (svg) {
+      el.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = txt + ' '; });
+    } else {
+      el.textContent = txt;
+    }
+  });
+  // Placeholders
+  document.querySelectorAll('[data-placeholder-en]').forEach(el => {
+    el.placeholder = el.getAttribute(`data-placeholder-${lang}`) || el.placeholder;
+  });
+  // Chat init message
+  document.getElementById('initMsg').textContent = translations[lang].chatGreeting;
+  document.getElementById('chatInputField').placeholder = translations[lang].chatPlaceholder;
+  document.getElementById('demoInput').placeholder = translations[lang].demoChatPlaceholder;
+  document.querySelector('.demo-greeting').textContent = translations[lang].demoGreeting;
+  document.getElementById('welcomeMsg').textContent = document.getElementById('welcomeMsg').getAttribute(`data-${lang}`);
+  document.documentElement.lang = lang;
+}
+
+// ---- HAMBURGER ----
+document.getElementById('hamburger').addEventListener('click', () => {
+  document.getElementById('mobile-menu').classList.toggle('open');
+});
+
+// ---- SCROLL REVEAL ----
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ---- WELCOME POPUP (3s delay) ----
+setTimeout(() => {
+  document.getElementById('welcomePopup').style.display = 'block';
+}, 3000);
+function closeWelcome() {
+  document.getElementById('welcomePopup').style.display = 'none';
+}
+
+// ---- CHAT BUBBLE ----
+function toggleChat() {
+  const panel = document.getElementById('chatPanel');
+  const isOpen = panel.classList.toggle('open');
+  document.getElementById('chatIcon').style.display = isOpen ? 'none' : 'block';
+  document.getElementById('closeIcon').style.display = isOpen ? 'block' : 'none';
+  if (isOpen) {
+    document.getElementById('welcomePopup').style.display = 'none';
+    setTimeout(() => document.getElementById('chatInputField').focus(), 100);
+  }
+}
+
+// ---- CHAT LOGIC (simple AI responses) ----
+const chatResponses = {
+  en: {
+    price: "VAI.ia pricing depends on your business size and channels needed. Contact us at vai.virtualassitant@gmail.com for a custom quote! 📧",
+    whatsapp: "Yes! VAI.ia connects natively to WhatsApp via Twilio. Setup takes less than 10 minutes. 💬",
+    sms: "Absolutely! SMS is one of our most popular channels. Works on any phone, no app needed. 📱",
+    instagram: "Yes, VAI.ia can auto-reply to your Instagram DMs using Meta's API. 📸",
+    booking: "VAI.ia handles all booking automatically — it checks your calendar, reserves the slot, and sends confirmation emails with a single click from the client. 📅",
+    hours: "VAI.ia works 24/7, 365 days a year. It never sleeps, never takes breaks, and never misses a message! ⚡",
+    default: "Great question! To get a personalized demo or learn more, fill out the contact form below or email us at vai.virtualassitant@gmail.com. We'd love to help! 🚀",
+  },
+  es: {
+    price: "El precio de VAI.ia depende del tamaño de tu negocio y los canales que necesitas. ¡Contáctanos en vai.virtualassitant@gmail.com para una cotización! 📧",
+    whatsapp: "¡Sí! VAI.ia se conecta nativamente a WhatsApp vía Twilio. La configuración tarda menos de 10 minutos. 💬",
+    sms: "¡Por supuesto! SMS es uno de nuestros canales más populares. Funciona en cualquier teléfono, sin app. 📱",
+    instagram: "Sí, VAI.ia puede responder automáticamente tus DMs de Instagram usando la API de Meta. 📸",
+    booking: "VAI.ia maneja todo el agendamiento automáticamente — revisa tu calendario, reserva el espacio y envía emails de confirmación. 📅",
+    hours: "¡VAI.ia trabaja 24/7, 365 días al año. Nunca duerme, nunca toma descansos! ⚡",
+    default: "¡Buena pregunta! Para una demo personalizada o más información, llena el formulario de contacto o escríbenos a vai.virtualassitant@gmail.com. ¡Con gusto te ayudamos! 🚀",
+  }
+};
+
+function getResponse(text, isDemo = false) {
+  const t = text.toLowerCase();
+  const r = chatResponses[lang];
+  if (t.includes('price') || t.includes('cost') || t.includes('precio') || t.includes('costo') || t.includes('cuanto') || t.includes('cuánto')) return r.price;
+  if (t.includes('whatsapp')) return r.whatsapp;
+  if (t.includes('sms') || t.includes('text')) return r.sms;
+  if (t.includes('instagram') || t.includes('ig')) return r.instagram;
+  if (t.includes('book') || t.includes('appoint') || t.includes('cita') || t.includes('agenda')) return r.booking;
+  if (t.includes('hour') || t.includes('24') || t.includes('hora') || t.includes('siempre')) return r.hours;
+  return r.default;
+}
+
+function sendChat() {
+  const input = document.getElementById('chatInputField');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const msgs = document.getElementById('chatMessages');
+  const userMsg = document.createElement('div');
+  userMsg.className = 'msg-user'; userMsg.textContent = text;
+  msgs.appendChild(userMsg);
+  msgs.scrollTop = msgs.scrollHeight;
+  setTimeout(() => {
+    const botMsg = document.createElement('div');
+    botMsg.className = 'msg-bot'; botMsg.textContent = getResponse(text);
+    msgs.appendChild(botMsg);
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 700);
+}
+
+// ---- DEMO CHAT ----
+function sendDemo() {
+  const input = document.getElementById('demoInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const msgs = document.getElementById('demoMessages');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex justify-end';
+  userDiv.innerHTML = `<div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-white leading-relaxed max-w-xs">${text}</div>`;
+  msgs.appendChild(userDiv);
+  msgs.scrollTop = msgs.scrollHeight;
+  setTimeout(() => {
+    const botDiv = document.createElement('div');
+    botDiv.className = 'flex gap-3 max-w-sm';
+    botDiv.innerHTML = `
+      <div class="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold flex-shrink-0">V</div>
+      <div class="bg-white/5 border border-white/8 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-white/80 leading-relaxed">${getResponse(text, true)}</div>`;
+    msgs.appendChild(botDiv);
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 800);
+}
+
+// ---- CONTACT FORM ----
+function submitContact(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.textContent = lang === 'en' ? 'Sending...' : 'Enviando...';
+  btn.disabled = true;
+  setTimeout(() => {
+    document.getElementById('contactSuccess').classList.remove('hidden');
+    btn.textContent = lang === 'en' ? 'Message sent ✓' : 'Mensaje enviado ✓';
+    ['cf_name','cf_email','cf_business','cf_message'].forEach(id => { document.getElementById(id).value = ''; });
+  }, 1000);
+}
+
+// ---- ACTIVE NAV ON SCROLL ----
+const sections = document.querySelectorAll('section[id]');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 80) current = s.id; });
+  document.querySelectorAll('.nav-link').forEach(a => {
+    a.classList.remove('nav-active');
+    if (a.getAttribute('href') === `#${current}`) a.classList.add('nav-active');
+  });
+});
+</script>
+</body>
+</html>

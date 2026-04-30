@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Astra AI — Mi Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--surface:#13131a;--surface2:#1a1a24;--border:#1e1e2e;
+  --accent:#34d399;--accent2:#6ee7b7;
+  --text:#e2e2f0;--muted:#6b6b8a;
+  --success:#34d399;--danger:#f87171;--warning:#fbbf24;
+  --sidebar:210px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+
+.sidebar{
+  width:var(--sidebar);min-height:100vh;
+  background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;bottom:0;z-index:100;
+}
+.sidebar-logo{
+  padding:24px 20px;display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border);
+}
+.logo-icon{
+  width:34px;height:34px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.logo-text{font-size:16px;font-weight:600}
+.logo-sub{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.5px}
+.user-card{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+}
+.user-email{font-size:13px;font-weight:500;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-slug{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace}
+.nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;
+  transition:all .15s;color:var(--muted);border:none;background:none;width:100%;text-align:left;
+}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:rgba(52,211,153,.12);color:var(--accent)}
+.sidebar-footer{padding:16px 20px;border-top:1px solid var(--border)}
+.logout-btn{
+  width:100%;background:none;border:1px solid var(--border);
+  border-radius:8px;padding:9px;color:var(--muted);
+  font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;
+}
+.logout-btn:hover{border-color:var(--danger);color:var(--danger)}
+
+.main{margin-left:var(--sidebar);flex:1;min-height:100vh;display:flex;flex-direction:column}
+.topbar{
+  padding:20px 32px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--surface);position:sticky;top:0;z-index:50;
+}
+.topbar-title{font-size:18px;font-weight:600}
+.topbar-sub{font-size:13px;color:var(--muted)}
+
+.panel{display:none;flex:1;flex-direction:column;padding:32px}
+.panel.active{display:flex}
+
+/* INFO PANEL */
+.info-section{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:24px;margin-bottom:20px;
+}
+.info-section h3{
+  font-size:13px;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.6px;margin-bottom:16px;
+}
+.info-row{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
+.info-row:last-child{border-bottom:none}
+.info-key{color:var(--muted);min-width:120px;font-weight:500}
+.info-value{color:var(--text);flex:1}
+.faq-q{font-size:14px;font-weight:500;margin-bottom:4px}
+.faq-a{font-size:13px;color:var(--muted);line-height:1.6}
+.faq-item{padding:12px 0;border-bottom:1px solid var(--border)}
+.faq-item:last-child{border-bottom:none}
+
+/* CALENDAR */
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.cal-nav{display:flex;gap:8px;align-items:center}
+.cal-nav button{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 14px;color:var(--text);
+  cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;transition:all .15s;
+}
+.cal-nav button:hover{border-color:var(--accent);color:var(--accent)}
+.cal-month{font-size:18px;font-weight:600;min-width:200px;text-align:center}
+.cal-grid{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:var(--surface2)}
+.cal-weekday{padding:12px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-day{
+  min-height:80px;padding:8px;
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+}
+.cal-day.other-month{opacity:.3}
+.cal-day.today .day-num{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#0a0a0f;border-radius:50%;width:26px;height:26px;
+  display:flex;align-items:center;justify-content:center;
+}
+.day-num{font-size:13px;font-weight:500;margin-bottom:4px;width:26px;height:26px;display:flex;align-items:center;justify-content:center}
+.appt-chip{
+  background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.25);
+  border-radius:4px;padding:2px 6px;font-size:11px;color:var(--accent);
+  margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  cursor:pointer;
+}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px}
+.stat-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.stat-value{font-size:32px;font-weight:600;font-family:'DM Mono',monospace;margin-bottom:4px}
+.upcoming-list{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;flex:1}
+.upcoming-list h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:16px}
+.appt-row{
+  display:flex;align-items:center;gap:16px;padding:12px 0;
+  border-bottom:1px solid var(--border);
+}
+.appt-row:last-child{border-bottom:none}
+.appt-date{
+  min-width:60px;text-align:center;
+  background:var(--surface2);border-radius:8px;padding:8px 6px;
+}
+.appt-date .day{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;line-height:1}
+.appt-date .month{font-size:11px;color:var(--muted);text-transform:uppercase}
+.appt-info{flex:1}
+.appt-service{font-size:14px;font-weight:500}
+.appt-time{font-size:13px;color:var(--muted);margin-top:2px}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
+.badge-green{background:rgba(52,211,153,.15);color:var(--success);border:1px solid rgba(52,211,153,.3)}
+.badge-yellow{background:rgba(251,191,36,.15);color:var(--warning);border:1px solid rgba(251,191,36,.3)}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative}
+.modal h3{font-size:18px;font-weight:600;margin-bottom:20px}
+.modal-close{position:absolute;top:20px;right:20px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
+.modal-close:hover{color:var(--text)}
+.detail-row{display:flex;gap:10px;font-size:14px;padding:8px 0;border-bottom:1px solid var(--border)}
+.detail-row:last-child{border-bottom:none}
+.detail-label{color:var(--muted);min-width:90px}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">✦</div>
+    <div>
+      <div class="logo-text">Astra AI</div>
+      <div class="logo-sub">MI PANEL</div>
+    </div>
+  </div>
+  <div class="user-card">
+    <div class="user-email" id="userEmail">Cargando...</div>
+    <div class="user-slug" id="userSlug">—</div>
+  </div>
+  <nav class="nav">
+    <button class="nav-item active" onclick="showPanel('info',this)">
+      <span>ℹ️</span> Mi información
+    </button>
+    <button class="nav-item" onclick="showPanel('calendar',this)">
+      <span>📅</span> Mis citas
+    </button>
+    <button class="nav-item" onclick="showPanel('stats',this)">
+      <span>📊</span> Estadísticas
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="logout-btn" onclick="logout()">Cerrar sesión</button>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="panelTitle">Mi información</div>
+      <div class="topbar-sub" id="topbarSub">Portal cliente · Astra AI</div>
+    </div>
+  </div>
+
+  <!-- PANEL INFO -->
+  <div class="panel active" id="panel-info">
+    <div class="info-section" id="businessInfo">
+      <h3>Información del negocio</h3>
+      <div id="bizRows"><div style="color:var(--muted);font-size:14px">Cargando...</div></div>
+    </div>
+    <div class="info-section" id="faqSection">
+      <h3>Preguntas frecuentes</h3>
+      <div id="faqRows"><div style="color:var(--muted);font-size:14px">Cargando...</div></div>
+    </div>
+  </div>
+
+  <!-- PANEL CALENDAR -->
+  <div class="panel" id="panel-calendar" style="flex-direction:column">
+    <div class="cal-header">
+      <div class="cal-nav">
+        <button onclick="changeMonth(-1)">‹</button>
+        <span class="cal-month" id="calMonth">Abril 2026</span>
+        <button onclick="changeMonth(1)">›</button>
+      </div>
+    </div>
+    <div class="cal-grid">
+      <div class="cal-weekdays">
+        <div class="cal-weekday">Dom</div><div class="cal-weekday">Lun</div>
+        <div class="cal-weekday">Mar</div><div class="cal-weekday">Mié</div>
+        <div class="cal-weekday">Jue</div><div class="cal-weekday">Vie</div>
+        <div class="cal-weekday">Sáb</div>
+      </div>
+      <div class="cal-days" id="calDays"></div>
+    </div>
+  </div>
+
+  <!-- PANEL STATS -->
+  <div class="panel" id="panel-stats" style="flex-direction:column">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total citas</div>
+        <div class="stat-value" id="st_total">0</div>
+        <div style="font-size:12px;color:var(--muted)">historial completo</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Próximas</div>
+        <div class="stat-value" id="st_upcoming">0</div>
+        <div style="font-size:12px;color:var(--muted)">agendadas</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Confirmadas</div>
+        <div class="stat-value" id="st_confirmed">0</div>
+        <div style="font-size:12px;color:var(--muted)">aprobadas</div>
+      </div>
+    </div>
+    <div class="upcoming-list">
+      <h3>Próximas citas</h3>
+      <div id="upcomingList"><div style="color:var(--muted);font-size:14px">Sin citas próximas</div></div>
+    </div>
+  </div>
+</main>
+
+<!-- MODAL DETALLE CITA -->
+<div class="modal-overlay" id="apptModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modalTitle">Detalle de cita</h3>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script>
+let appointments = [];
+let tenantConfig = {};
+let userSlug = '';
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+
+(async () => {
+  try {
+    const me = await fetch('/client/api/me', {credentials:'include'});
+    const u = await me.json();
+    if (!u.ok) return window.location.href = '/client/login';
+    document.getElementById('userEmail').textContent = u.email;
+    document.getElementById('userSlug').textContent = u.slug || '—';
+    document.getElementById('topbarSub').textContent = `${u.slug || 'cliente'} · Astra AI`;
+    userSlug = u.slug || '';
+    await loadAll();
+  } catch { window.location.href = '/client/login'; }
+})();
+
+async function loadAll() {
+  await Promise.all([loadInfo(), loadAppointments()]);
+  renderCalendar();
+  renderStats();
+}
+
+async function loadInfo() {
+  try {
+    const res = await fetch(`/admin/api/tenant/${userSlug}`, {credentials:'include'});
+    tenantConfig = await res.json();
+    renderInfo();
+  } catch {}
+}
+
+function renderInfo() {
+  const v = tenantConfig.vars || {};
+  const fields = [
+    ['Negocio', v.business || v.name],
+    ['Teléfono', v.phone],
+    ['Dirección', v.address],
+    ['Horario', v.hours],
+    ['Política', v.policy],
+  ].filter(([,val]) => val);
+  const bizRows = document.getElementById('bizRows');
+  if (fields.length === 0) {
+    bizRows.innerHTML = '<div style="color:var(--muted);font-size:14px">Sin información registrada</div>';
+  } else {
+    bizRows.innerHTML = fields.map(([k,v]) =>
+      `<div class="info-row"><div class="info-key">${k}</div><div class="info-value">${v}</div></div>`
+    ).join('');
+  }
+  const faqs = tenantConfig.faq || [];
+  const faqRows = document.getElementById('faqRows');
+  if (faqs.length === 0) {
+    faqRows.innerHTML = '<div style="color:var(--muted);font-size:14px">Sin preguntas frecuentes</div>';
+  } else {
+    faqRows.innerHTML = faqs.map(f =>
+      `<div class="faq-item"><div class="faq-q">${f.q}</div><div class="faq-a">${f.a}</div></div>`
+    ).join('');
+  }
+}
+
+async function loadAppointments() {
+  try {
+    const res = await fetch('/client/api/appointments', {credentials:'include'});
+    const d = await res.json();
+    appointments = d.appointments || [];
+  } catch { appointments = []; }
+}
+
+function renderCalendar() {
+  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('calMonth').textContent = `${months[calMonth]} ${calYear}`;
+  const first = new Date(calYear, calMonth, 1);
+  const last = new Date(calYear, calMonth+1, 0);
+  const today = new Date();
+  const container = document.getElementById('calDays');
+  container.innerHTML = '';
+  for (let i = 0; i < first.getDay(); i++) {
+    const d = document.createElement('div');
+    d.className = 'cal-day other-month';
+    container.appendChild(d);
+  }
+  for (let day = 1; day <= last.getDate(); day++) {
+    const d = document.createElement('div');
+    d.className = 'cal-day';
+    const isToday = today.getDate()===day && today.getMonth()===calMonth && today.getFullYear()===calYear;
+    if (isToday) d.classList.add('today');
+    d.innerHTML = `<div class="day-num">${day}</div>`;
+    const dayAppts = appointments.filter(a => {
+      const s = new Date(a.start);
+      return s.getDate()===day && s.getMonth()===calMonth && s.getFullYear()===calYear;
+    });
+    dayAppts.forEach(a => {
+      const chip = document.createElement('div');
+      chip.className = 'appt-chip';
+      const t = new Date(a.start).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+      chip.textContent = `${t} ${a.service||'Cita'}`;
+      chip.onclick = () => openApptDetail(a);
+      d.appendChild(chip);
+    });
+    container.appendChild(d);
+  }
+}
+
+function changeMonth(dir) {
+  calMonth += dir;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+}
+
+function openApptDetail(a) {
+  const start = new Date(a.start);
+  const end = new Date(a.end||a.start);
+  document.getElementById('modalTitle').textContent = a.service || 'Cita';
+  document.getElementById('modalContent').innerHTML = `
+    <div class="detail-row"><span class="detail-label">Servicio</span><span>${a.service||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Inicio</span><span>${start.toLocaleString('es')}</span></div>
+    <div class="detail-row"><span class="detail-label">Fin</span><span>${end.toLocaleString('es')}</span></div>
+    <div class="detail-row"><span class="detail-label">Estado</span><span class="badge ${a.confirmed?'badge-green':'badge-yellow'}">${a.confirmed?'Confirmada':'Pendiente'}</span></div>
+    ${a.notes?`<div class="detail-row"><span class="detail-label">Notas</span><span>${a.notes}</span></div>`:''}`;
+  document.getElementById('apptModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('apptModal').classList.remove('open');
+}
+
+function renderStats() {
+  const now = new Date();
+  const upcoming = appointments.filter(a => new Date(a.start) > now);
+  const confirmed = appointments.filter(a => a.confirmed);
+  document.getElementById('st_total').textContent = appointments.length;
+  document.getElementById('st_upcoming').textContent = upcoming.length;
+  document.getElementById('st_confirmed').textContent = confirmed.length;
+  const list = document.getElementById('upcomingList');
+  if (upcoming.length === 0) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:14px">Sin citas próximas</div>';
+    return;
+  }
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  list.innerHTML = upcoming.slice(0,10).map(a => {
+    const s = new Date(a.start);
+    const t = s.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+    return `<div class="appt-row" onclick="openApptDetail(${JSON.stringify(a).replace(/"/g,'&quot;')}" style="cursor:pointer">
+      <div class="appt-date">
+        <div class="day">${s.getDate()}</div>
+        <div class="month">${months[s.getMonth()]}</div>
+      </div>
+      <div class="appt-info">
+        <div class="appt-service">${a.service||'Cita'}</div>
+        <div class="appt-time">${t}</div>
+      </div>
+      <span class="badge ${a.confirmed?'badge-green':'badge-yellow'}">${a.confirmed?'Confirmada':'Pendiente'}</span>
+    </div>`;
+  }).join('');
+}
+
+function showPanel(name, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById(`panel-${name}`).classList.add('active');
+  btn.classList.add('active');
+  const titles = {info:'Mi información',calendar:'Mis citas',stats:'Estadísticas'};
+  document.getElementById('panelTitle').textContent = titles[name]||name;
+  if (name==='calendar') renderCalendar();
+  if (name==='stats') renderStats();
+}
+
+async function logout() {
+  await fetch('/client/auth/logout', {method:'POST', credentials:'include'});
+  window.location.href = '/client/login';
+}
+</script>
+</body>
+</html>

@@ -602,6 +602,32 @@ app.post("/admin/api/tenant/save", verifyAdmin, async (req,res)=>{
       return res.status(400).json({ error:"missing data" });
     }
 
+    const clientEmail = req.body.client_email;
+    const clientPassword = req.body.client_password;
+    if (clientEmail && clientPassword) {
+      try {
+        const bcryptMod = await import('bcrypt');
+        const hash = await bcryptMod.default.hash(clientPassword, 10);
+        const sbMod = await import('./auth/supabase.js');
+        const sb = sbMod.default;
+        const { data: existing } = await sb
+          .from('client_users').select('id')
+          .eq('email', clientEmail.toLowerCase().trim()).single();
+        if (!existing) {
+          await sb.from('client_users').insert([{
+            email: clientEmail.toLowerCase().trim(),
+            password_hash: hash,
+            tenant_slug: slug,
+            name: req.body.config && req.body.config.vars && req.body.config.vars.name ? req.body.config.vars.name : slug
+          }]);
+          console.log('[TENANT] Client user created in Supabase:', clientEmail);
+        } else {
+          console.log('[TENANT] Client user already exists:', clientEmail);
+        }
+      } catch(e) {
+        console.error('[TENANT] Error creating client user:', e.message);
+      }
+    }
     const file = path.join(TENANTS_DIR, `${slug}.json`);
     await fs.writeFile(file, JSON.stringify(config,null,2), "utf8");
 

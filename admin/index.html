@@ -243,6 +243,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="form-grid">
         <div class="form-field"><label>Slug (unique ID)</label><input id="nt_slug" placeholder="my-barbershop"></div>
         <div class="form-field"><label>Business name</label><input id="nt_name" placeholder="My Barbershop"></div>
+        <div class="form-field"><label>Client email</label><input id="nt_email" type="email" placeholder="client@business.com"></div>
+        <div class="form-field"><label>Client password</label><input id="nt_password" type="password" placeholder="Min 8 characters"></div>
         <div class="form-field form-full"><label>System prompt</label><textarea id="nt_system" placeholder="You are the assistant of..."></textarea></div>
       </div>
       <div class="form-actions">
@@ -569,6 +571,10 @@ async function saveInfo() {
 
 async function createTenant() {
   const slug = document.getElementById('nt_slug').value.trim().toLowerCase().replace(/\s/g,'-');
+  const email = document.getElementById('nt_email')?.value.trim();
+  const password = document.getElementById('nt_password')?.value.trim();
+  if (!email) return showToast('Client email is required','error');
+  if (!password || password.length < 8) return showToast('Password must be at least 8 characters','error');
   const name = document.getElementById('nt_name').value.trim();
   const system = document.getElementById('nt_system').value.trim();
   if (!slug) return showToast('Slug is required','error');
@@ -581,7 +587,7 @@ async function createTenant() {
     const res = await fetch('/admin/api/tenant/save', {
       method:'POST', credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({slug, config})
+      body: JSON.stringify({slug, config, client_email: email, client_password: password})
     });
     const d = await res.json();
     if (d.ok) { showToast('Client created','success'); toggleNewClient(); loadTenants(); }

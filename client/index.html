@@ -1,292 +1,536 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Astra AI — Mi Panel</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>VAI.ia — My Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0a0f;--surface:#13131a;--surface2:#1a1a24;--border:#1e1e2e;
-  --accent:#34d399;--accent2:#6ee7b7;
-  --text:#e2e2f0;--muted:#6b6b8a;
-  --success:#34d399;--danger:#f87171;--warning:#fbbf24;
-  --sidebar:210px;
+  --bg:#04040a;
+  --surface:rgba(255,255,255,.03);
+  --surface2:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.07);
+  --border2:rgba(255,255,255,.12);
+  --accent:#64CEFB;
+  --accent2:#a78bfa;
+  --accent3:#34d399;
+  --text:#f0eeff;
+  --muted:rgba(240,238,255,.45);
+  --muted2:rgba(240,238,255,.25);
+  --danger:#f87171;
+  --warning:#fbbf24;
+  --sidebar:260px;
 }
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow-x:hidden}
 
+/* Sidebar */
 .sidebar{
   width:var(--sidebar);min-height:100vh;
-  background:var(--surface);border-right:1px solid var(--border);
+  background:rgba(4,4,10,.95);
+  border-right:1px solid var(--border);
   display:flex;flex-direction:column;
   position:fixed;top:0;left:0;bottom:0;z-index:100;
+  backdrop-filter:blur(20px);
 }
-.sidebar-logo{
-  padding:24px 20px;display:flex;align-items:center;gap:10px;
-  border-bottom:1px solid var(--border);
-}
-.logo-icon{
-  width:34px;height:34px;
-  background:linear-gradient(135deg,var(--accent),var(--accent2));
-  border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;
-}
-.logo-text{font-size:16px;font-weight:600}
-.logo-sub{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.5px}
-.user-card{
-  padding:16px 20px;border-bottom:1px solid var(--border);
-}
-.user-email{font-size:13px;font-weight:500;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.user-slug{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace}
-.nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
-.nav-item{
-  display:flex;align-items:center;gap:10px;padding:10px 12px;
-  border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;
-  transition:all .15s;color:var(--muted);border:none;background:none;width:100%;text-align:left;
-}
+.sidebar-top{padding:28px 24px;border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.brand-circle{width:30px;height:30px;border-radius:50%;border:1.5px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center}
+.brand-dot{width:12px;height:12px;border-radius:50%;background:#fff}
+.brand-name{font-size:16px;font-weight:600;letter-spacing:-.3px}
+.brand-name span{color:var(--accent)}
+.user-card{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px}
+.user-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#04040a;flex-shrink:0}
+.user-info{min-width:0}
+.user-email{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role{font-size:11px;color:var(--muted);margin-top:1px}
+.user-row{display:flex;align-items:center;gap:10px}
+.online-dot{width:7px;height:7px;border-radius:50%;background:var(--accent3);box-shadow:0 0 6px var(--accent3);flex-shrink:0;margin-left:auto}
+
+.nav{flex:1;padding:20px 16px;display:flex;flex-direction:column;gap:2px}
+.nav-section{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted2);padding:0 8px;margin:12px 0 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border:none;background:none;width:100%;text-align:left;transition:all .15s;position:relative}
 .nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:rgba(52,211,153,.12);color:var(--accent)}
+.nav-item.active{background:rgba(100,206,251,.08);color:var(--accent);border:1px solid rgba(100,206,251,.12)}
+.nav-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px}
+.nav-item.active .nav-icon{background:rgba(100,206,251,.12)}
+.nav-item:hover .nav-icon{background:var(--surface2)}
+.nav-badge{background:rgba(100,206,251,.15);color:var(--accent);font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;margin-left:auto}
+
 .sidebar-footer{padding:16px 20px;border-top:1px solid var(--border)}
-.logout-btn{
-  width:100%;background:none;border:1px solid var(--border);
-  border-radius:8px;padding:9px;color:var(--muted);
-  font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;
-}
+.logout-btn{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--muted);font-family:'Inter',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px}
 .logout-btn:hover{border-color:var(--danger);color:var(--danger)}
 
+/* Main */
 .main{margin-left:var(--sidebar);flex:1;min-height:100vh;display:flex;flex-direction:column}
-.topbar{
-  padding:20px 32px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--surface);position:sticky;top:0;z-index:50;
-}
-.topbar-title{font-size:18px;font-weight:600}
-.topbar-sub{font-size:13px;color:var(--muted)}
 
-.panel{display:none;flex:1;flex-direction:column;padding:32px}
+.topbar{
+  padding:0 36px;height:64px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(4,4,10,.8);backdrop-filter:blur(20px);
+  position:sticky;top:0;z-index:50;
+}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.topbar-title{font-size:16px;font-weight:600}
+.topbar-breadcrumb{font-size:13px;color:var(--muted)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.lang-toggle{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;color:var(--muted);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;font-weight:500;letter-spacing:.5px;transition:all .15s}
+.lang-toggle:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Panels */
+.panel{display:none;flex:1;flex-direction:column;padding:32px 36px}
 .panel.active{display:flex}
 
-/* INFO PANEL */
-.info-section{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:16px;padding:24px;margin-bottom:20px;
-}
-.info-section h3{
-  font-size:13px;color:var(--muted);text-transform:uppercase;
-  letter-spacing:.6px;margin-bottom:16px;
-}
-.info-row{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
-.info-row:last-child{border-bottom:none}
-.info-key{color:var(--muted);min-width:120px;font-weight:500}
-.info-value{color:var(--text);flex:1}
-.faq-q{font-size:14px;font-weight:500;margin-bottom:4px}
-.faq-a{font-size:13px;color:var(--muted);line-height:1.6}
-.faq-item{padding:12px 0;border-bottom:1px solid var(--border)}
-.faq-item:last-child{border-bottom:none}
+/* Overview panel */
+.welcome-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+.welcome-text h2{font-size:22px;font-weight:600;margin-bottom:4px;letter-spacing:-.3px}
+.welcome-text p{font-size:14px;color:var(--muted)}
 
-/* CALENDAR */
-.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-.cal-nav{display:flex;gap:8px;align-items:center}
-.cal-nav button{
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px}
+.stat-tile{
   background:var(--surface);border:1px solid var(--border);
-  border-radius:8px;padding:8px 14px;color:var(--text);
-  cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;transition:all .15s;
+  border-radius:16px;padding:20px 24px;
+  transition:border-color .2s;
 }
-.cal-nav button:hover{border-color:var(--accent);color:var(--accent)}
-.cal-month{font-size:18px;font-weight:600;min-width:200px;text-align:center}
-.cal-grid{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
-.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:var(--surface2)}
-.cal-weekday{padding:12px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.cal-days{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-day{
-  min-height:80px;padding:8px;
-  border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+.stat-tile:hover{border-color:var(--border2)}
+.stat-tile-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.stat-tile-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.stat-tile-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:500}
+.stat-tile-value{font-size:28px;font-weight:600;letter-spacing:-.5px;margin-bottom:4px}
+.stat-tile-sub{font-size:12px;color:var(--muted)}
+
+/* Calendar */
+.cal-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;flex:1}
+.cal-header-row{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border)}
+.cal-header-row h3{font-size:15px;font-weight:600}
+.cal-nav-btns{display:flex;gap:8px;align-items:center}
+.cal-nav-btn{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 12px;color:var(--muted);cursor:pointer;font-size:13px;transition:all .15s}
+.cal-nav-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.cal-month-label{font-size:14px;font-weight:500;min-width:130px;text-align:center}
+.cal-grid-header{display:grid;grid-template-columns:repeat(7,1fr);background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)}
+.cal-day-name{padding:10px;text-align:center;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.cal-days-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-cell{min-height:80px;padding:8px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);cursor:default;transition:background .15s}
+.cal-cell:hover{background:rgba(255,255,255,.02)}
+.cal-cell.other{opacity:.25}
+.cal-cell.today .day-n{
+  width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#4db8e8);
+  color:#04040a;display:flex;align-items:center;justify-content:center;font-weight:600;
 }
-.cal-day.other-month{opacity:.3}
-.cal-day.today .day-num{
-  background:linear-gradient(135deg,var(--accent),var(--accent2));
-  color:#0a0a0f;border-radius:50%;width:26px;height:26px;
-  display:flex;align-items:center;justify-content:center;
-}
-.day-num{font-size:13px;font-weight:500;margin-bottom:4px;width:26px;height:26px;display:flex;align-items:center;justify-content:center}
+.day-n{font-size:13px;font-weight:500;margin-bottom:4px;width:26px;height:26px;display:flex;align-items:center;justify-content:center}
 .appt-chip{
-  background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.25);
-  border-radius:4px;padding:2px 6px;font-size:11px;color:var(--accent);
-  margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  cursor:pointer;
+  background:rgba(100,206,251,.1);border:1px solid rgba(100,206,251,.2);
+  border-radius:5px;padding:2px 7px;font-size:11px;color:var(--accent);
+  margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;
 }
+.appt-chip:hover{background:rgba(100,206,251,.18)}
 
-/* STATS */
-.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px}
-.stat-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
-.stat-value{font-size:32px;font-weight:600;font-family:'DM Mono',monospace;margin-bottom:4px}
-.upcoming-list{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;flex:1}
-.upcoming-list h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:16px}
-.appt-row{
-  display:flex;align-items:center;gap:16px;padding:12px 0;
-  border-bottom:1px solid var(--border);
-}
+/* Info panel */
+.info-sections{display:flex;flex-direction:column;gap:20px}
+.info-block{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.info-block-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.info-block-header h3{font-size:14px;font-weight:600}
+.info-block-body{padding:24px}
+.info-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.info-row:last-child{border-bottom:none;padding-bottom:0}
+.info-key{font-size:13px;color:var(--muted);min-width:140px;font-weight:500}
+.info-val{font-size:14px;color:var(--text);flex:1}
+.info-empty{font-size:14px;color:var(--muted2);text-align:center;padding:20px 0}
+.faq-item{padding:16px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.faq-item:last-child{border-bottom:none;padding-bottom:0}
+.faq-q{font-size:14px;font-weight:500;margin-bottom:6px}
+.faq-a{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* Stats panel */
+.chart-row{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:20px;flex:1}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px}
+.chart-card h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:20px;font-weight:500}
+.bar-chart{display:flex;align-items:flex-end;gap:8px;height:160px}
+.bar-group{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px}
+.bar{width:100%;border-radius:4px 4px 0 0;background:linear-gradient(to top,rgba(100,206,251,.4),rgba(100,206,251,.8));min-height:3px;transition:height .3s}
+.bar-lbl{font-size:10px;color:var(--muted)}
+.bar-val{font-size:10px;color:var(--accent);font-weight:500}
+.upcoming-list{display:flex;flex-direction:column;gap:0}
+.appt-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.04)}
 .appt-row:last-child{border-bottom:none}
-.appt-date{
-  min-width:60px;text-align:center;
-  background:var(--surface2);border-radius:8px;padding:8px 6px;
-}
-.appt-date .day{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;line-height:1}
-.appt-date .month{font-size:11px;color:var(--muted);text-transform:uppercase}
-.appt-info{flex:1}
-.appt-service{font-size:14px;font-weight:500}
-.appt-time{font-size:13px;color:var(--muted);margin-top:2px}
-.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
-.badge-green{background:rgba(52,211,153,.15);color:var(--success);border:1px solid rgba(52,211,153,.3)}
-.badge-yellow{background:rgba(251,191,36,.15);color:var(--warning);border:1px solid rgba(251,191,36,.3)}
+.appt-date-box{min-width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 6px;text-align:center}
+.appt-date-box .dd{font-size:18px;font-weight:700;line-height:1;letter-spacing:-.5px}
+.appt-date-box .mo{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.appt-info{flex:1;min-width:0}
+.appt-service{font-size:14px;font-weight:500;margin-bottom:3px}
+.appt-time{font-size:12px;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.2px}
+.badge-green{background:rgba(52,211,153,.12);color:var(--accent3);border:1px solid rgba(52,211,153,.25)}
+.badge-yellow{background:rgba(251,191,36,.1);color:var(--warning);border:1px solid rgba(251,191,36,.2)}
 
-/* MODAL */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(8px)}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative}
-.modal h3{font-size:18px;font-weight:600;margin-bottom:20px}
-.modal-close{position:absolute;top:20px;right:20px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
+.modal{background:#0a0a14;border:1px solid var(--border2);border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 40px 100px rgba(0,0,0,.6)}
+.modal-close{position:absolute;top:20px;right:20px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
 .modal-close:hover{color:var(--text)}
-.detail-row{display:flex;gap:10px;font-size:14px;padding:8px 0;border-bottom:1px solid var(--border)}
+.modal h3{font-size:18px;font-weight:600;margin-bottom:20px;letter-spacing:-.3px}
+.detail-row{display:flex;gap:12px;font-size:14px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .detail-row:last-child{border-bottom:none}
-.detail-label{color:var(--muted);min-width:90px}
+.detail-label{color:var(--muted);min-width:90px;font-weight:500}
+
+/* Responsive */
+@media(max-width:900px){
+  .sidebar{transform:translateX(-100%);transition:transform .3s}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}
+  .stats-row{grid-template-columns:1fr}
+  .chart-row{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 
-<aside class="sidebar">
-  <div class="sidebar-logo">
-    <div class="logo-icon">✦</div>
-    <div>
-      <div class="logo-text">Astra AI</div>
-      <div class="logo-sub">MI PANEL</div>
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-top">
+    <div class="brand">
+      <div class="brand-circle"><div class="brand-dot"></div></div>
+      <div class="brand-name">VAI<span>.ia</span></div>
+    </div>
+    <div class="user-card">
+      <div class="user-row">
+        <div class="user-avatar" id="userAvatar">U</div>
+        <div class="user-info">
+          <div class="user-email" id="userEmail">Loading...</div>
+          <div class="user-role" id="userRole">Client</div>
+        </div>
+        <div class="online-dot"></div>
+      </div>
     </div>
   </div>
-  <div class="user-card">
-    <div class="user-email" id="userEmail">Cargando...</div>
-    <div class="user-slug" id="userSlug">—</div>
-  </div>
+
   <nav class="nav">
-    <button class="nav-item active" onclick="showPanel('info',this)">
-      <span>ℹ️</span> Mi información
+    <div class="nav-section" id="ns1">Overview</div>
+    <button class="nav-item active" onclick="showPanel('overview',this)" id="nav-overview">
+      <div class="nav-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      </div>
+      <span id="nav-overview-text">Overview</span>
     </button>
-    <button class="nav-item" onclick="showPanel('calendar',this)">
-      <span>📅</span> Mis citas
+
+    <div class="nav-section" id="ns2">My Business</div>
+    <button class="nav-item" onclick="showPanel('calendar',this)" id="nav-calendar">
+      <div class="nav-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </div>
+      <span id="nav-calendar-text">Appointments</span>
     </button>
-    <button class="nav-item" onclick="showPanel('stats',this)">
-      <span>📊</span> Estadísticas
+    <button class="nav-item" onclick="showPanel('info',this)" id="nav-info">
+      <div class="nav-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <span id="nav-info-text">Business Info</span>
+    </button>
+    <button class="nav-item" onclick="showPanel('stats',this)" id="nav-stats">
+      <div class="nav-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </div>
+      <span id="nav-stats-text">Statistics</span>
     </button>
   </nav>
+
   <div class="sidebar-footer">
-    <button class="logout-btn" onclick="logout()">Cerrar sesión</button>
+    <button class="logout-btn" onclick="logout()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span id="logoutText">Sign out</span>
+    </button>
   </div>
 </aside>
 
+<!-- MAIN -->
 <main class="main">
   <div class="topbar">
-    <div>
-      <div class="topbar-title" id="panelTitle">Mi información</div>
-      <div class="topbar-sub" id="topbarSub">Portal cliente · Astra AI</div>
+    <div class="topbar-left">
+      <div class="topbar-title" id="topbarTitle">Overview</div>
+    </div>
+    <div class="topbar-right">
+      <button class="lang-toggle" onclick="toggleLang()" id="langBtn">ES</button>
     </div>
   </div>
 
-  <!-- PANEL INFO -->
-  <div class="panel active" id="panel-info">
-    <div class="info-section" id="businessInfo">
-      <h3>Información del negocio</h3>
-      <div id="bizRows"><div style="color:var(--muted);font-size:14px">Cargando...</div></div>
+  <!-- OVERVIEW PANEL -->
+  <div class="panel active" id="panel-overview">
+    <div class="welcome-bar">
+      <div class="welcome-text">
+        <h2 id="welcomeTitle">Good morning</h2>
+        <p id="welcomeSub">Here's what's happening with your business today.</p>
+      </div>
     </div>
-    <div class="info-section" id="faqSection">
-      <h3>Preguntas frecuentes</h3>
-      <div id="faqRows"><div style="color:var(--muted);font-size:14px">Cargando...</div></div>
+
+    <div class="stats-row">
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-tile-label" id="st1label">Total Appointments</div>
+          <div class="stat-tile-icon" style="background:rgba(100,206,251,.1)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64CEFB" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+        </div>
+        <div class="stat-tile-value" id="st1val">0</div>
+        <div class="stat-tile-sub" id="st1sub">All time</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-tile-label" id="st2label">Upcoming</div>
+          <div class="stat-tile-icon" style="background:rgba(167,139,250,.1)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+        </div>
+        <div class="stat-tile-value" id="st2val">0</div>
+        <div class="stat-tile-sub" id="st2sub">Scheduled</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-tile-label" id="st3label">Confirmed</div>
+          <div class="stat-tile-icon" style="background:rgba(52,211,153,.1)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+        <div class="stat-tile-value" id="st3val">0</div>
+        <div class="stat-tile-sub" id="st3sub">Approved</div>
+      </div>
+    </div>
+
+    <!-- Upcoming appointments list -->
+    <div class="info-block" style="flex:1">
+      <div class="info-block-header">
+        <h3 id="upcomingTitle">Upcoming Appointments</h3>
+      </div>
+      <div style="padding:24px">
+        <div id="upcomingList"><div class="info-empty" id="upcomingEmpty">No upcoming appointments</div></div>
+      </div>
     </div>
   </div>
 
-  <!-- PANEL CALENDAR -->
+  <!-- CALENDAR PANEL -->
   <div class="panel" id="panel-calendar" style="flex-direction:column">
-    <div class="cal-header">
-      <div class="cal-nav">
-        <button onclick="changeMonth(-1)">‹</button>
-        <span class="cal-month" id="calMonth">Abril 2026</span>
-        <button onclick="changeMonth(1)">›</button>
+    <div class="cal-wrap">
+      <div class="cal-header-row">
+        <h3 id="calTitle">My Appointments</h3>
+        <div class="cal-nav-btns">
+          <button class="cal-nav-btn" onclick="changeMonth(-1)">&#8249;</button>
+          <span class="cal-month-label" id="calMonthLabel">May 2026</span>
+          <button class="cal-nav-btn" onclick="changeMonth(1)">&#8250;</button>
+        </div>
       </div>
-    </div>
-    <div class="cal-grid">
-      <div class="cal-weekdays">
-        <div class="cal-weekday">Dom</div><div class="cal-weekday">Lun</div>
-        <div class="cal-weekday">Mar</div><div class="cal-weekday">Mié</div>
-        <div class="cal-weekday">Jue</div><div class="cal-weekday">Vie</div>
-        <div class="cal-weekday">Sáb</div>
+      <div class="cal-grid-header">
+        <div class="cal-day-name" id="dn0">Sun</div>
+        <div class="cal-day-name" id="dn1">Mon</div>
+        <div class="cal-day-name" id="dn2">Tue</div>
+        <div class="cal-day-name" id="dn3">Wed</div>
+        <div class="cal-day-name" id="dn4">Thu</div>
+        <div class="cal-day-name" id="dn5">Fri</div>
+        <div class="cal-day-name" id="dn6">Sat</div>
       </div>
-      <div class="cal-days" id="calDays"></div>
+      <div class="cal-days-grid" id="calDays"></div>
     </div>
   </div>
 
-  <!-- PANEL STATS -->
-  <div class="panel" id="panel-stats" style="flex-direction:column">
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Total citas</div>
-        <div class="stat-value" id="st_total">0</div>
-        <div style="font-size:12px;color:var(--muted)">historial completo</div>
+  <!-- INFO PANEL -->
+  <div class="panel" id="panel-info">
+    <div class="info-sections">
+      <div class="info-block">
+        <div class="info-block-header">
+          <h3 id="bizInfoTitle">Business Information</h3>
+        </div>
+        <div class="info-block-body" id="bizInfoBody">
+          <div class="info-empty">Loading...</div>
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Próximas</div>
-        <div class="stat-value" id="st_upcoming">0</div>
-        <div style="font-size:12px;color:var(--muted)">agendadas</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Confirmadas</div>
-        <div class="stat-value" id="st_confirmed">0</div>
-        <div style="font-size:12px;color:var(--muted)">aprobadas</div>
+      <div class="info-block">
+        <div class="info-block-header">
+          <h3 id="faqTitle">Frequently Asked Questions</h3>
+        </div>
+        <div class="info-block-body" id="faqBody">
+          <div class="info-empty">Loading...</div>
+        </div>
       </div>
     </div>
-    <div class="upcoming-list">
-      <h3>Próximas citas</h3>
-      <div id="upcomingList"><div style="color:var(--muted);font-size:14px">Sin citas próximas</div></div>
+  </div>
+
+  <!-- STATS PANEL -->
+  <div class="panel" id="panel-stats" style="flex-direction:column">
+    <div class="stats-row">
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-tile-label" id="st4label">Total</div>
+          <div class="stat-tile-icon" style="background:rgba(100,206,251,.1)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64CEFB" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg>
+          </div>
+        </div>
+        <div class="stat-tile-value" id="st4val">0</div>
+        <div class="stat-tile-sub" id="st4sub">All appointments</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-tile-label" id="st5label">Upcoming</div>
+          <div class="stat-tile-icon" style="background:rgba(167,139,250,.1)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+          </div>
+        </div>
+        <div class="stat-tile-value" id="st5val">0</div>
+        <div class="stat-tile-sub" id="st5sub">Scheduled</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-tile-label" id="st6label">Confirmed</div>
+          <div class="stat-tile-icon" style="background:rgba(52,211,153,.1)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+        <div class="stat-tile-value" id="st6val">0</div>
+        <div class="stat-tile-sub" id="st6sub">Approved</div>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-card">
+        <h3 id="chartByMonth">Appointments by Month</h3>
+        <div class="bar-chart" id="barChart"></div>
+      </div>
+      <div class="chart-card">
+        <h3 id="chartUpcoming">Next Appointments</h3>
+        <div class="upcoming-list" id="statUpcoming"><div class="info-empty">None</div></div>
+      </div>
     </div>
   </div>
 </main>
 
-<!-- MODAL DETALLE CITA -->
+<!-- MODAL -->
 <div class="modal-overlay" id="apptModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeModal()">✕</button>
-    <h3 id="modalTitle">Detalle de cita</h3>
+    <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    <h3 id="modalTitle">Appointment</h3>
     <div id="modalContent"></div>
   </div>
 </div>
 
 <script>
+let lang = 'en';
 let appointments = [];
 let tenantConfig = {};
 let userSlug = '';
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 
+const T = {
+  en:{
+    ns1:'Overview', ns2:'My Business',
+    navOverview:'Overview', navCalendar:'Appointments', navInfo:'Business Info', navStats:'Statistics',
+    logout:'Sign out', langBtn:'ES',
+    welcomeTitle: getGreeting('en'), welcomeSub:'Here\'s what\'s happening with your business today.',
+    st1:'Total Appointments', st1sub:'All time',
+    st2:'Upcoming', st2sub:'Scheduled',
+    st3:'Confirmed', st3sub:'Approved',
+    upcomingTitle:'Upcoming Appointments', upcomingEmpty:'No upcoming appointments',
+    calTitle:'My Appointments',
+    dayNames:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    months:['January','February','March','April','May','June','July','August','September','October','November','December'],
+    shortMonths:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    bizInfoTitle:'Business Information', faqTitle:'Frequently Asked Questions',
+    st4:'Total', st4sub:'All appointments', st5:'Upcoming', st5sub:'Scheduled', st6:'Confirmed', st6sub:'Approved',
+    chartByMonth:'Appointments by Month', chartUpcoming:'Next Appointments',
+    confirmed:'Confirmed', pending:'Pending',
+    service:'Service', start:'Start', end:'End', status:'Status', notes:'Notes',
+    noInfo:'No information registered', noFaq:'No FAQs available',
+  },
+  es:{
+    ns1:'Resumen', ns2:'Mi Negocio',
+    navOverview:'Resumen', navCalendar:'Citas', navInfo:'Info del Negocio', navStats:'Estadisticas',
+    logout:'Cerrar sesion', langBtn:'EN',
+    welcomeTitle: getGreeting('es'), welcomeSub:'Esto es lo que pasa en tu negocio hoy.',
+    st1:'Total de Citas', st1sub:'Historico',
+    st2:'Proximas', st2sub:'Agendadas',
+    st3:'Confirmadas', st3sub:'Aprobadas',
+    upcomingTitle:'Proximas Citas', upcomingEmpty:'Sin citas proximas',
+    calTitle:'Mis Citas',
+    dayNames:['Dom','Lun','Mar','Mie','Jue','Vie','Sab'],
+    months:['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
+    shortMonths:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+    bizInfoTitle:'Informacion del Negocio', faqTitle:'Preguntas Frecuentes',
+    st4:'Total', st4sub:'Todas las citas', st5:'Proximas', st5sub:'Agendadas', st6:'Confirmadas', st6sub:'Aprobadas',
+    chartByMonth:'Citas por Mes', chartUpcoming:'Proximas Citas',
+    confirmed:'Confirmada', pending:'Pendiente',
+    service:'Servicio', start:'Inicio', end:'Fin', status:'Estado', notes:'Notas',
+    noInfo:'Sin informacion registrada', noFaq:'Sin preguntas frecuentes',
+  }
+};
+
+function getGreeting(l) {
+  const h = new Date().getHours();
+  if(l==='es') return h<12?'Buenos dias':h<18?'Buenas tardes':'Buenas noches';
+  return h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+}
+
+function applyLang() {
+  const d = T[lang];
+  document.getElementById('ns1').textContent = d.ns1;
+  document.getElementById('ns2').textContent = d.ns2;
+  document.getElementById('nav-overview-text').textContent = d.navOverview;
+  document.getElementById('nav-calendar-text').textContent = d.navCalendar;
+  document.getElementById('nav-info-text').textContent = d.navInfo;
+  document.getElementById('nav-stats-text').textContent = d.navStats;
+  document.getElementById('logoutText').textContent = d.logout;
+  document.getElementById('langBtn').textContent = d.langBtn;
+  document.getElementById('welcomeTitle').textContent = d.welcomeTitle;
+  document.getElementById('welcomeSub').textContent = d.welcomeSub;
+  document.getElementById('st1label').textContent = d.st1;
+  document.getElementById('st1sub').textContent = d.st1sub;
+  document.getElementById('st2label').textContent = d.st2;
+  document.getElementById('st2sub').textContent = d.st2sub;
+  document.getElementById('st3label').textContent = d.st3;
+  document.getElementById('st3sub').textContent = d.st3sub;
+  document.getElementById('upcomingTitle').textContent = d.upcomingTitle;
+  document.getElementById('calTitle').textContent = d.calTitle;
+  document.getElementById('bizInfoTitle').textContent = d.bizInfoTitle;
+  document.getElementById('faqTitle').textContent = d.faqTitle;
+  document.getElementById('st4label').textContent = d.st4;
+  document.getElementById('st4sub').textContent = d.st4sub;
+  document.getElementById('st5label').textContent = d.st5;
+  document.getElementById('st5sub').textContent = d.st5sub;
+  document.getElementById('st6label').textContent = d.st6;
+  document.getElementById('st6sub').textContent = d.st6sub;
+  document.getElementById('chartByMonth').textContent = d.chartByMonth;
+  document.getElementById('chartUpcoming').textContent = d.chartUpcoming;
+  for(let i=0;i<7;i++) document.getElementById('dn'+i).textContent = d.dayNames[i];
+  renderCalendar();
+  renderOverviewList();
+  renderStatUpcoming();
+}
+
+function toggleLang() {
+  lang = lang === 'en' ? 'es' : 'en';
+  applyLang();
+}
+
+// Init
 (async () => {
   try {
-    const me = await fetch('/client/api/me', {credentials:'include'});
-    const u = await me.json();
+    const res = await fetch('/client/api/me', {credentials:'include'});
+    const u = await res.json();
     if (!u.ok) return window.location.href = '/client/login';
     document.getElementById('userEmail').textContent = u.email;
-    document.getElementById('userSlug').textContent = u.slug || '—';
-    document.getElementById('topbarSub').textContent = `${u.slug || 'cliente'} · Astra AI`;
+    document.getElementById('userRole').textContent = u.slug || 'Client';
+    document.getElementById('userAvatar').textContent = (u.email||'U')[0].toUpperCase();
     userSlug = u.slug || '';
-    await loadAll();
+    await Promise.all([loadInfo(), loadAppointments()]);
+    renderCalendar();
+    renderStats();
+    renderOverviewList();
   } catch { window.location.href = '/client/login'; }
 })();
 
-async function loadAll() {
-  await Promise.all([loadInfo(), loadAppointments()]);
-  renderCalendar();
-  renderStats();
-}
-
 async function loadInfo() {
   try {
-    const res = await fetch(`/admin/api/tenant/${userSlug}`, {credentials:'include'});
+    const res = await fetch('/admin/api/tenant/' + userSlug, {credentials:'include'});
     tenantConfig = await res.json();
     renderInfo();
   } catch {}
@@ -294,30 +538,25 @@ async function loadInfo() {
 
 function renderInfo() {
   const v = tenantConfig.vars || {};
+  const d = T[lang];
   const fields = [
-    ['Negocio', v.business || v.name],
-    ['Teléfono', v.phone],
-    ['Dirección', v.address],
-    ['Horario', v.hours],
-    ['Política', v.policy],
+    ['Business', v.business || v.name],
+    ['Phone', v.phone],
+    ['Address', v.address],
+    ['Hours', v.hours],
+    ['Policy', v.policy],
   ].filter(([,val]) => val);
-  const bizRows = document.getElementById('bizRows');
-  if (fields.length === 0) {
-    bizRows.innerHTML = '<div style="color:var(--muted);font-size:14px">Sin información registrada</div>';
-  } else {
-    bizRows.innerHTML = fields.map(([k,v]) =>
-      `<div class="info-row"><div class="info-key">${k}</div><div class="info-value">${v}</div></div>`
-    ).join('');
-  }
+
+  const body = document.getElementById('bizInfoBody');
+  body.innerHTML = fields.length === 0
+    ? '<div class="info-empty">' + d.noInfo + '</div>'
+    : fields.map(([k,v]) => '<div class="info-row"><div class="info-key">'+k+'</div><div class="info-val">'+v+'</div></div>').join('');
+
   const faqs = tenantConfig.faq || [];
-  const faqRows = document.getElementById('faqRows');
-  if (faqs.length === 0) {
-    faqRows.innerHTML = '<div style="color:var(--muted);font-size:14px">Sin preguntas frecuentes</div>';
-  } else {
-    faqRows.innerHTML = faqs.map(f =>
-      `<div class="faq-item"><div class="faq-q">${f.q}</div><div class="faq-a">${f.a}</div></div>`
-    ).join('');
-  }
+  const faqBody = document.getElementById('faqBody');
+  faqBody.innerHTML = faqs.length === 0
+    ? '<div class="info-empty">' + d.noFaq + '</div>'
+    : faqs.map(f => '<div class="faq-item"><div class="faq-q">'+f.q+'</div><div class="faq-a">'+f.a+'</div></div>').join('');
 }
 
 async function loadAppointments() {
@@ -328,109 +567,138 @@ async function loadAppointments() {
   } catch { appointments = []; }
 }
 
-function renderCalendar() {
-  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  document.getElementById('calMonth').textContent = `${months[calMonth]} ${calYear}`;
-  const first = new Date(calYear, calMonth, 1);
-  const last = new Date(calYear, calMonth+1, 0);
-  const today = new Date();
-  const container = document.getElementById('calDays');
-  container.innerHTML = '';
-  for (let i = 0; i < first.getDay(); i++) {
-    const d = document.createElement('div');
-    d.className = 'cal-day other-month';
-    container.appendChild(d);
+function renderOverviewList() {
+  const now = new Date();
+  const upcoming = appointments.filter(a => new Date(a.start) > now).slice(0, 5);
+  const d = T[lang];
+  const months = d.shortMonths;
+  const list = document.getElementById('upcomingList');
+  if (upcoming.length === 0) {
+    list.innerHTML = '<div class="info-empty">' + d.upcomingEmpty + '</div>';
+    return;
   }
-  for (let day = 1; day <= last.getDate(); day++) {
-    const d = document.createElement('div');
-    d.className = 'cal-day';
-    const isToday = today.getDate()===day && today.getMonth()===calMonth && today.getFullYear()===calYear;
-    if (isToday) d.classList.add('today');
-    d.innerHTML = `<div class="day-num">${day}</div>`;
-    const dayAppts = appointments.filter(a => {
-      const s = new Date(a.start);
-      return s.getDate()===day && s.getMonth()===calMonth && s.getFullYear()===calYear;
-    });
-    dayAppts.forEach(a => {
-      const chip = document.createElement('div');
-      chip.className = 'appt-chip';
-      const t = new Date(a.start).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
-      chip.textContent = `${t} ${a.service||'Cita'}`;
-      chip.onclick = () => openApptDetail(a);
-      d.appendChild(chip);
-    });
-    container.appendChild(d);
-  }
-}
-
-function changeMonth(dir) {
-  calMonth += dir;
-  if (calMonth > 11) { calMonth = 0; calYear++; }
-  if (calMonth < 0) { calMonth = 11; calYear--; }
-  renderCalendar();
-}
-
-function openApptDetail(a) {
-  const start = new Date(a.start);
-  const end = new Date(a.end||a.start);
-  document.getElementById('modalTitle').textContent = a.service || 'Cita';
-  document.getElementById('modalContent').innerHTML = `
-    <div class="detail-row"><span class="detail-label">Servicio</span><span>${a.service||'—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Inicio</span><span>${start.toLocaleString('es')}</span></div>
-    <div class="detail-row"><span class="detail-label">Fin</span><span>${end.toLocaleString('es')}</span></div>
-    <div class="detail-row"><span class="detail-label">Estado</span><span class="badge ${a.confirmed?'badge-green':'badge-yellow'}">${a.confirmed?'Confirmada':'Pendiente'}</span></div>
-    ${a.notes?`<div class="detail-row"><span class="detail-label">Notas</span><span>${a.notes}</span></div>`:''}`;
-  document.getElementById('apptModal').classList.add('open');
-}
-
-function closeModal() {
-  document.getElementById('apptModal').classList.remove('open');
+  list.innerHTML = upcoming.map(a => {
+    const s = new Date(a.start);
+    const t = s.toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="appt-row" onclick="openDetail('+JSON.stringify(a).replace(/"/g,"'")+')" style="cursor:pointer">' +
+      '<div class="appt-date-box"><div class="dd">'+s.getDate()+'</div><div class="mo">'+months[s.getMonth()]+'</div></div>' +
+      '<div class="appt-info"><div class="appt-service">'+(a.service||'Appointment')+'</div><div class="appt-time">'+t+'</div></div>' +
+      '<span class="badge '+(a.confirmed?'badge-green':'badge-yellow')+'">'+(a.confirmed?d.confirmed:d.pending)+'</span>' +
+      '</div>';
+  }).join('');
 }
 
 function renderStats() {
   const now = new Date();
   const upcoming = appointments.filter(a => new Date(a.start) > now);
   const confirmed = appointments.filter(a => a.confirmed);
-  document.getElementById('st_total').textContent = appointments.length;
-  document.getElementById('st_upcoming').textContent = upcoming.length;
-  document.getElementById('st_confirmed').textContent = confirmed.length;
-  const list = document.getElementById('upcomingList');
-  if (upcoming.length === 0) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:14px">Sin citas próximas</div>';
-    return;
-  }
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  list.innerHTML = upcoming.slice(0,10).map(a => {
-    const s = new Date(a.start);
-    const t = s.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
-    return `<div class="appt-row" onclick="openApptDetail(${JSON.stringify(a).replace(/"/g,'&quot;')}" style="cursor:pointer">
-      <div class="appt-date">
-        <div class="day">${s.getDate()}</div>
-        <div class="month">${months[s.getMonth()]}</div>
-      </div>
-      <div class="appt-info">
-        <div class="appt-service">${a.service||'Cita'}</div>
-        <div class="appt-time">${t}</div>
-      </div>
-      <span class="badge ${a.confirmed?'badge-green':'badge-yellow'}">${a.confirmed?'Confirmada':'Pendiente'}</span>
-    </div>`;
+  document.getElementById('st1val').textContent = appointments.length;
+  document.getElementById('st2val').textContent = upcoming.length;
+  document.getElementById('st3val').textContent = confirmed.length;
+  document.getElementById('st4val').textContent = appointments.length;
+  document.getElementById('st5val').textContent = upcoming.length;
+  document.getElementById('st6val').textContent = confirmed.length;
+  renderBarChart();
+  renderStatUpcoming();
+}
+
+function renderBarChart() {
+  const d = T[lang];
+  const counts = Array(12).fill(0);
+  appointments.forEach(a => { counts[new Date(a.start).getMonth()]++; });
+  const max = Math.max(...counts, 1);
+  const chart = document.getElementById('barChart');
+  chart.innerHTML = d.shortMonths.map((m,i) => {
+    const h = Math.round((counts[i]/max)*140);
+    return '<div class="bar-group"><div class="bar-val">'+(counts[i]||'')+'</div><div class="bar" style="height:'+h+'px"></div><div class="bar-lbl">'+m+'</div></div>';
   }).join('');
 }
 
-function showPanel(name, btn) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  document.getElementById(`panel-${name}`).classList.add('active');
-  btn.classList.add('active');
-  const titles = {info:'Mi información',calendar:'Mis citas',stats:'Estadísticas'};
-  document.getElementById('panelTitle').textContent = titles[name]||name;
-  if (name==='calendar') renderCalendar();
-  if (name==='stats') renderStats();
+function renderStatUpcoming() {
+  const now = new Date();
+  const d = T[lang];
+  const upcoming = appointments.filter(a => new Date(a.start) > now).slice(0,4);
+  const el = document.getElementById('statUpcoming');
+  if(upcoming.length===0){el.innerHTML='<div class="info-empty">'+d.upcomingEmpty+'</div>';return;}
+  const months = d.shortMonths;
+  el.innerHTML = upcoming.map(a=>{
+    const s=new Date(a.start);
+    const t=s.toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="appt-row" onclick="openDetail('+JSON.stringify(a).replace(/"/g,"'")+')" style="cursor:pointer">'+
+      '<div class="appt-date-box"><div class="dd">'+s.getDate()+'</div><div class="mo">'+months[s.getMonth()]+'</div></div>'+
+      '<div class="appt-info"><div class="appt-service">'+(a.service||'Appointment')+'</div><div class="appt-time">'+t+'</div></div>'+
+      '<span class="badge '+(a.confirmed?'badge-green':'badge-yellow')+'">'+(a.confirmed?d.confirmed:d.pending)+'</span>'+
+      '</div>';
+  }).join('');
 }
 
-async function logout() {
-  await fetch('/client/auth/logout', {method:'POST', credentials:'include'});
-  window.location.href = '/client/login';
+function renderCalendar() {
+  const d = T[lang];
+  document.getElementById('calMonthLabel').textContent = d.months[calMonth] + ' ' + calYear;
+  const first = new Date(calYear, calMonth, 1);
+  const last = new Date(calYear, calMonth+1, 0);
+  const today = new Date();
+  const container = document.getElementById('calDays');
+  container.innerHTML = '';
+  for(let i=0;i<first.getDay();i++){
+    const el=document.createElement('div');el.className='cal-cell other';container.appendChild(el);
+  }
+  for(let day=1;day<=last.getDate();day++){
+    const el=document.createElement('div');el.className='cal-cell';
+    const isToday=today.getDate()===day&&today.getMonth()===calMonth&&today.getFullYear()===calYear;
+    if(isToday)el.classList.add('today');
+    el.innerHTML='<div class="day-n">'+day+'</div>';
+    appointments.filter(a=>{
+      const s=new Date(a.start);
+      return s.getDate()===day&&s.getMonth()===calMonth&&s.getFullYear()===calYear;
+    }).forEach(a=>{
+      const chip=document.createElement('div');chip.className='appt-chip';
+      const t=new Date(a.start).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
+      chip.textContent=t+' '+(a.service||'Appt');
+      chip.onclick=()=>openDetail(a);
+      el.appendChild(chip);
+    });
+    container.appendChild(el);
+  }
+}
+
+function changeMonth(dir) {
+  calMonth+=dir;
+  if(calMonth>11){calMonth=0;calYear++;}
+  if(calMonth<0){calMonth=11;calYear--;}
+  renderCalendar();
+}
+
+function openDetail(a) {
+  const d = T[lang];
+  const s = new Date(a.start), e = new Date(a.end||a.start);
+  document.getElementById('modalTitle').textContent = a.service || 'Appointment';
+  document.getElementById('modalContent').innerHTML =
+    '<div class="detail-row"><span class="detail-label">'+d.service+'</span><span>'+(a.service||'—')+'</span></div>' +
+    '<div class="detail-row"><span class="detail-label">'+d.start+'</span><span>'+s.toLocaleString()+'</span></div>' +
+    '<div class="detail-row"><span class="detail-label">'+d.end+'</span><span>'+e.toLocaleString()+'</span></div>' +
+    '<div class="detail-row"><span class="detail-label">'+d.status+'</span><span class="badge '+(a.confirmed?'badge-green':'badge-yellow')+'">'+(a.confirmed?d.confirmed:d.pending)+'</span></div>' +
+    (a.notes?'<div class="detail-row"><span class="detail-label">'+d.notes+'</span><span>'+a.notes+'</span></div>':'');
+  document.getElementById('apptModal').classList.add('open');
+}
+
+function closeModal(){document.getElementById('apptModal').classList.remove('open');}
+
+function showPanel(name, btn) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  btn.classList.add('active');
+  const titles={overview:T[lang].navOverview,calendar:T[lang].navCalendar,info:T[lang].navInfo,stats:T[lang].navStats};
+  document.getElementById('topbarTitle').textContent=titles[name]||name;
+  if(name==='calendar')renderCalendar();
+  if(name==='stats'){renderBarChart();renderStatUpcoming();}
+  if(name==='info')renderInfo();
+}
+
+async function logout(){
+  await fetch('/client/auth/logout',{method:'POST',credentials:'include'});
+  window.location.href='/client/login';
 }
 </script>
 </body>

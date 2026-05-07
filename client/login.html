@@ -1,126 +1,333 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Astra AI — Cliente</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>VAI.ia — Client Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0a0f;--surface:#13131a;--border:#1e1e2e;
-  --accent:#34d399;--accent2:#6ee7b7;
-  --text:#e2e2f0;--muted:#6b6b8a;--danger:#f87171;
+  --bg:#04040a;
+  --card:rgba(255,255,255,.04);
+  --border:rgba(255,255,255,.08);
+  --border-focus:rgba(100,206,251,.4);
+  --accent:#64CEFB;
+  --accent2:#a78bfa;
+  --text:#f0eeff;
+  --muted:rgba(240,238,255,.45);
+  --danger:#f87171;
+  --input-bg:rgba(255,255,255,.04);
 }
-body{
-  font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
-  min-height:100vh;display:flex;align-items:center;justify-content:center;
-  position:relative;overflow:hidden;
-}
-body::before{
-  content:'';position:fixed;
-  width:500px;height:500px;
-  background:radial-gradient(circle,rgba(52,211,153,.1) 0%,transparent 70%);
-  top:-150px;right:-150px;pointer-events:none;
-}
-body::after{
-  content:'';position:fixed;
-  width:400px;height:400px;
-  background:radial-gradient(circle,rgba(110,231,183,.07) 0%,transparent 70%);
-  bottom:-100px;left:-100px;pointer-events:none;
-}
-.card{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:20px;padding:48px 40px;
-  width:100%;max-width:420px;position:relative;z-index:1;
-  box-shadow:0 24px 80px rgba(0,0,0,.5);
-}
-.logo{display:flex;align-items:center;gap:12px;margin-bottom:36px}
-.logo-icon{
-  width:40px;height:40px;
-  background:linear-gradient(135deg,var(--accent),var(--accent2));
-  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;
-}
-.logo-text{font-size:20px;font-weight:600}
-.logo-sub{font-size:12px;color:var(--muted);font-family:'DM Mono',monospace}
-h1{font-size:26px;font-weight:600;margin-bottom:6px;letter-spacing:-.4px}
-.subtitle{color:var(--muted);font-size:14px;margin-bottom:32px}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+
+/* Background */
+.bg{position:fixed;inset:0;z-index:0}
+video.bg-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.25}
+.bg-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(4,4,10,.95) 0%,rgba(10,6,20,.85) 50%,rgba(4,4,10,.95) 100%)}
+.orb1{position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(100,206,251,.12) 0%,transparent 65%);top:-150px;left:-100px;pointer-events:none}
+.orb2{position:absolute;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(167,139,250,.1) 0%,transparent 65%);bottom:-100px;right:-100px;pointer-events:none}
+
+/* Layout */
+.page{position:relative;z-index:1;height:100vh;display:grid;grid-template-columns:1fr 1fr;align-items:stretch}
+
+/* Left panel */
+.left{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:60px 80px;border-right:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:60px}
+.brand-circle{width:36px;height:36px;border-radius:50%;border:2px solid rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center}
+.brand-dot{width:14px;height:14px;border-radius:50%;background:#fff}
+.brand-name{font-size:18px;font-weight:600;letter-spacing:-.3px}
+.brand-name span{color:var(--accent)}
+.left-headline{font-size:clamp(32px,3.5vw,48px);font-weight:300;line-height:1.15;letter-spacing:-.03em;margin-bottom:20px}
+.left-headline strong{font-weight:600;display:block}
+.left-sub{font-size:15px;color:var(--muted);line-height:1.7;max-width:380px;margin-bottom:48px}
+.features{display:flex;flex-direction:column;gap:16px}
+.feature{display:flex;align-items:center;gap:14px}
+.feature-icon{width:36px;height:36px;border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;background:var(--input-bg);flex-shrink:0}
+.feature-text{font-size:14px;color:var(--muted)}
+.feature-text strong{color:var(--text);font-weight:500}
+
+/* Right panel — form */
+.right{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px 60px;position:relative}
+
+.lang-btn{position:absolute;top:32px;right:32px;background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:6px 14px;color:var(--muted);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all .2s;letter-spacing:.5px;font-weight:500}
+.lang-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+.form-card{width:100%;max-width:400px}
+.form-header{margin-bottom:36px}
+.form-eyebrow{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;font-weight:500}
+.form-title{font-size:28px;font-weight:600;letter-spacing:-.4px;margin-bottom:8px}
+.form-sub{font-size:14px;color:var(--muted)}
+
 .field{margin-bottom:18px}
-label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:500}
-input{
-  width:100%;background:#0a0a0f;border:1px solid var(--border);
-  border-radius:10px;padding:12px 16px;color:var(--text);
-  font-size:15px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500;letter-spacing:.2px}
+.field-wrap{position:relative}
+.field input{
+  width:100%;background:var(--input-bg);
+  border:1px solid var(--border);
+  border-radius:12px;padding:13px 16px;
+  color:var(--text);font-size:15px;
+  font-family:'Inter',sans-serif;outline:none;
+  transition:border-color .2s,background .2s;
 }
-input:focus{border-color:var(--accent)}
-.btn{
-  width:100%;background:linear-gradient(135deg,var(--accent),var(--accent2));
-  border:none;border-radius:10px;padding:14px;color:#0a0a0f;
-  font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;
-  margin-top:8px;transition:opacity .2s;
+.field input:focus{border-color:var(--border-focus);background:rgba(100,206,251,.04)}
+.field input::placeholder{color:rgba(255,255,255,.2)}
+.field-wrap .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;padding:4px;transition:color .2s}
+.field-wrap .eye:hover{color:var(--muted)}
+
+.submit-btn{
+  width:100%;padding:14px;border:none;border-radius:12px;
+  background:linear-gradient(135deg,var(--accent),#4db8e8);
+  color:#04040a;font-size:15px;font-weight:700;
+  font-family:'Inter',sans-serif;cursor:pointer;
+  transition:opacity .2s,transform .1s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:8px;
 }
-.btn:hover{opacity:.9}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.error{
-  color:var(--danger);font-size:13px;margin-top:12px;display:none;
-  background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);
-  border-radius:8px;padding:10px 14px;
-}
-.admin-link{text-align:center;margin-top:24px;font-size:13px;color:var(--muted)}
-.admin-link a{color:var(--accent);text-decoration:none}
+.submit-btn:hover{opacity:.9;transform:translateY(-1px)}
+.submit-btn:active{transform:translateY(0)}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+.spinner{width:16px;height:16px;border:2px solid rgba(4,4,10,.3);border-top-color:#04040a;border-radius:50%;animation:spin .6s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.error-box{display:none;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:10px;padding:11px 14px;color:var(--danger);font-size:13px;margin-top:14px}
+
+.divider{display:flex;align-items:center;gap:12px;margin:24px 0;color:var(--muted);font-size:12px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.admin-link{text-align:center;font-size:13px;color:var(--muted)}
+.admin-link a{color:var(--accent);text-decoration:none;font-weight:500}
 .admin-link a:hover{text-decoration:underline}
+
+/* Animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.form-card{animation:fadeUp .5s ease both}
+.left-headline{animation:fadeUp .5s .1s ease both;opacity:0}
+.left-sub{animation:fadeUp .5s .2s ease both;opacity:0}
+.features{animation:fadeUp .5s .3s ease both;opacity:0}
+
+/* Mobile */
+@media(max-width:768px){
+  html,body{overflow:auto}
+  .page{grid-template-columns:1fr;height:auto;min-height:100vh}
+  .left{display:none}
+  .right{padding:40px 24px;min-height:100vh}
+  .lang-btn{top:20px;right:20px}
+}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="logo">
-    <div class="logo-icon">✦</div>
-    <div>
-      <div class="logo-text">Astra AI</div>
-      <div class="logo-sub">PORTAL CLIENTE</div>
+
+<!-- Background -->
+<div class="bg">
+  <video class="bg-video" autoplay loop muted playsinline>
+    <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_105406_16f4600d-7a92-4292-b96e-b19156c7830a.mp4" type="video/mp4">
+  </video>
+  <div class="bg-overlay"></div>
+  <div class="orb1"></div>
+  <div class="orb2"></div>
+</div>
+
+<div class="page">
+
+  <!-- LEFT -->
+  <div class="left">
+    <div class="brand">
+      <div class="brand-circle"><div class="brand-dot"></div></div>
+      <div class="brand-name">VAI<span>.ia</span></div>
+    </div>
+    <h1 class="left-headline">
+      <span id="hl1">Your business,</span>
+      <strong id="hl2">always available.</strong>
+    </h1>
+    <p class="left-sub" id="left-sub">Access your client portal to view your appointments, business information, and usage statistics.</p>
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64CEFB" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div class="feature-text"><strong id="f1t">Appointments</strong> <span id="f1s">— All your bookings in one place</span></div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="feature-text"><strong id="f2t">AI Responses</strong> <span id="f2s">— Your assistant, always working</span></div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <div class="feature-text"><strong id="f3t">Statistics</strong> <span id="f3s">— Track your business performance</span></div>
+      </div>
     </div>
   </div>
-  <h1>Mi cuenta</h1>
-  <p class="subtitle">Accede para ver tus citas e información</p>
-  <form id="loginForm">
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="email" placeholder="tucorreo@email.com" required autofocus>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <button class="lang-btn" id="langBtn" onclick="toggleLang()">ES</button>
+
+    <div class="form-card">
+      <div class="form-header">
+        <div class="form-eyebrow" id="eyebrow">Client Portal</div>
+        <div class="form-title" id="formTitle">Welcome back</div>
+        <div class="form-sub" id="formSub">Sign in to access your account</div>
+      </div>
+
+      <form id="loginForm" autocomplete="on">
+        <div class="field">
+          <label id="emailLabel">Email address</label>
+          <div class="field-wrap">
+            <input type="email" id="email" name="email" placeholder="you@business.com" required autocomplete="email" autofocus>
+          </div>
+        </div>
+        <div class="field">
+          <label id="passLabel">Password</label>
+          <div class="field-wrap">
+            <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password" style="padding-right:44px">
+            <button type="button" class="eye" onclick="togglePass()" id="eyeBtn">
+              <svg id="eyeOpen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg id="eyeClosed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          <span id="btnText">Sign in</span>
+          <div class="spinner" id="spinner"></div>
+          <svg id="btnArrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+
+        <div class="error-box" id="errorBox">Invalid credentials. Please try again.</div>
+      </form>
+
+      <div class="divider"><span id="divText">or</span></div>
+      <div class="admin-link">
+        <span id="adminText">Are you an admin?</span>
+        <a href="/login" id="adminLink"> Admin panel</a>
+      </div>
     </div>
-    <div class="field">
-      <label>Contraseña</label>
-      <input type="password" id="password" placeholder="••••••••" required>
-    </div>
-    <button class="btn" type="submit" id="btn">Entrar</button>
-    <div class="error" id="error">Credenciales incorrectas</div>
-  </form>
-  <div class="admin-link">¿Eres admin? <a href="/login">Panel de administración</a></div>
+  </div>
 </div>
+
 <script>
+let lang = 'en';
+
+const t = {
+  en: {
+    eyebrow: 'Client Portal', title: 'Welcome back', sub: 'Sign in to access your account',
+    emailLabel: 'Email address', passLabel: 'Password', btn: 'Sign in',
+    hl1: 'Your business,', hl2: 'always available.',
+    leftSub: 'Access your client portal to view your appointments, business information, and usage statistics.',
+    f1t: 'Appointments', f1s: '— All your bookings in one place',
+    f2t: 'AI Responses', f2s: '— Your assistant, always working',
+    f3t: 'Statistics', f3s: '— Track your business performance',
+    divText: 'or', adminText: 'Are you an admin?', adminLink: ' Admin panel',
+    error: 'Invalid credentials. Please try again.',
+    langBtn: 'ES'
+  },
+  es: {
+    eyebrow: 'Portal de Cliente', title: 'Bienvenido', sub: 'Inicia sesion para acceder a tu cuenta',
+    emailLabel: 'Correo electronico', passLabel: 'Contrasena', btn: 'Iniciar sesion',
+    hl1: 'Tu negocio,', hl2: 'siempre disponible.',
+    leftSub: 'Accede a tu portal de cliente para ver tus citas, informacion del negocio y estadisticas de uso.',
+    f1t: 'Citas', f1s: '— Todas tus reservas en un lugar',
+    f2t: 'Respuestas IA', f2s: '— Tu asistente, siempre trabajando',
+    f3t: 'Estadisticas', f3s: '— Monitorea el rendimiento de tu negocio',
+    divText: 'o', adminText: 'Eres administrador?', adminLink: ' Panel de admin',
+    error: 'Credenciales invalidas. Por favor intenta de nuevo.',
+    langBtn: 'EN'
+  }
+};
+
+function applyLang() {
+  const d = t[lang];
+  document.getElementById('eyebrow').textContent = d.eyebrow;
+  document.getElementById('formTitle').textContent = d.title;
+  document.getElementById('formSub').textContent = d.sub;
+  document.getElementById('emailLabel').textContent = d.emailLabel;
+  document.getElementById('passLabel').textContent = d.passLabel;
+  document.getElementById('btnText').textContent = d.btn;
+  document.getElementById('hl1').textContent = d.hl1;
+  document.getElementById('hl2').textContent = d.hl2;
+  document.getElementById('left-sub').textContent = d.leftSub;
+  document.getElementById('f1t').textContent = d.f1t;
+  document.getElementById('f1s').textContent = d.f1s;
+  document.getElementById('f2t').textContent = d.f2t;
+  document.getElementById('f2s').textContent = d.f2s;
+  document.getElementById('f3t').textContent = d.f3t;
+  document.getElementById('f3s').textContent = d.f3s;
+  document.getElementById('divText').textContent = d.divText;
+  document.getElementById('adminText').textContent = d.adminText;
+  document.getElementById('adminLink').textContent = d.adminLink;
+  document.getElementById('langBtn').textContent = d.langBtn;
+  document.documentElement.lang = lang;
+}
+
+function toggleLang() {
+  lang = lang === 'en' ? 'es' : 'en';
+  applyLang();
+}
+
+function togglePass() {
+  const inp = document.getElementById('password');
+  const open = document.getElementById('eyeOpen');
+  const closed = document.getElementById('eyeClosed');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    open.style.display = 'none';
+    closed.style.display = 'block';
+  } else {
+    inp.type = 'password';
+    open.style.display = 'block';
+    closed.style.display = 'none';
+  }
+}
+
 document.getElementById('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = document.getElementById('btn');
-  const err = document.getElementById('error');
-  btn.disabled = true; btn.textContent = 'Entrando...'; err.style.display = 'none';
+  const btn = document.getElementById('submitBtn');
+  const txt = document.getElementById('btnText');
+  const spin = document.getElementById('spinner');
+  const arrow = document.getElementById('btnArrow');
+  const err = document.getElementById('errorBox');
+
+  btn.disabled = true;
+  txt.textContent = lang === 'en' ? 'Signing in...' : 'Iniciando sesion...';
+  spin.style.display = 'block';
+  arrow.style.display = 'none';
+  err.style.display = 'none';
+
   try {
     const res = await fetch('/client/auth/login', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        email: document.getElementById('email').value,
+        email: document.getElementById('email').value.trim(),
         password: document.getElementById('password').value
       })
     });
     const data = await res.json();
-    if (data.ok) window.location.href = data.redirectTo || '/client';
-    else {
-      err.textContent = data.error || 'Credenciales incorrectas';
+    if (data.ok) {
+      txt.textContent = lang === 'en' ? 'Redirecting...' : 'Redirigiendo...';
+      window.location.href = data.redirectTo || '/client';
+    } else {
+      err.textContent = t[lang].error;
       err.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Entrar';
+      btn.disabled = false;
+      txt.textContent = t[lang].btn;
+      spin.style.display = 'none';
+      arrow.style.display = 'block';
     }
   } catch {
-    err.textContent = 'Error de conexión';
+    err.textContent = lang === 'en' ? 'Connection error. Please try again.' : 'Error de conexion. Intenta de nuevo.';
     err.style.display = 'block';
-    btn.disabled = false; btn.textContent = 'Entrar';
+    btn.disabled = false;
+    txt.textContent = t[lang].btn;
+    spin.style.display = 'none';
+    arrow.style.display = 'block';
   }
 });
 </script>

@@ -3,834 +3,564 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VAI.ia — Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>VAI.ia — Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0a0f;--surface:#13131a;--surface2:#1a1a24;--border:#1e1e2e;
-  --accent:#6c63ff;--accent2:#a78bfa;--text:#e2e2f0;--muted:#6b6b8a;
-  --success:#34d399;--danger:#f87171;--warning:#fbbf24;--sidebar:220px;
+  --bg:#04040a;--surface:rgba(255,255,255,.03);--surface2:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
+  --accent:#64CEFB;--accent2:#a78bfa;--accent3:#34d399;
+  --text:#f0eeff;--muted:rgba(240,238,255,.45);--muted2:rgba(240,238,255,.22);
+  --danger:#f87171;--warning:#fbbf24;--sidebar:240px;
 }
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
-
-.sidebar{
-  width:var(--sidebar);min-height:100vh;background:var(--surface);
-  border-right:1px solid var(--border);display:flex;flex-direction:column;
-  position:fixed;top:0;left:0;bottom:0;z-index:100;
-}
-.sidebar-logo{padding:24px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
-.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
-.logo-text{font-size:16px;font-weight:600}
-.logo-sub{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.5px}
-
-.tenant-section{padding:16px 20px;border-bottom:1px solid var(--border)}
-.tenant-section label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:8px}
-.tenant-row{display:flex;gap:6px;align-items:center}
-.tenant-select{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;cursor:pointer}
-.delete-btn{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:7px 9px;color:var(--danger);cursor:pointer;font-size:13px;flex-shrink:0;transition:all .15s}
-.delete-btn:hover{background:rgba(248,113,113,.2)}
-
-.nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;transition:all .15s;color:var(--muted);border:none;background:none;width:100%;text-align:left}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+.sidebar{width:var(--sidebar);min-height:100vh;background:rgba(4,4,10,.97);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sidebar-top{padding:22px 18px;border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.brand-circle{width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center}
+.brand-dot{width:11px;height:11px;border-radius:50%;background:#fff}
+.brand-name{font-size:15px;font-weight:600}
+.brand-name span{color:var(--accent)}
+.back-btn{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;cursor:pointer;padding:7px 10px;border-radius:8px;transition:all .15s;background:none;border:none;width:100%;text-align:left;margin-bottom:10px}
+.back-btn:hover{color:var(--text);background:var(--surface2)}
+.tenant-badge{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:11px 13px}
+.tenant-badge-name{font-size:13px;font-weight:600;margin-bottom:2px}
+.tenant-badge-slug{font-size:11px;color:var(--muted);font-family:monospace}
+.client-view-btn{display:flex;align-items:center;gap:8px;width:100%;background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.18);border-radius:9px;padding:9px 13px;color:var(--accent3);font-size:12px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;margin-top:8px;transition:all .15s}
+.client-view-btn:hover{background:rgba(52,211,153,.14)}
+.nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+.nav-section{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted2);padding:0 8px;margin:10px 0 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border:none;background:none;width:100%;text-align:left;transition:all .15s}
 .nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:rgba(108,99,255,.15);color:var(--accent2)}
-.nav-icon{font-size:15px;width:20px;text-align:center}
-
-.sidebar-footer{padding:16px 20px;border-top:1px solid var(--border)}
-.logout-btn{width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s}
+.nav-item.active{background:rgba(100,206,251,.08);color:var(--accent);border:1px solid rgba(100,206,251,.12)}
+.nav-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-item.active .nav-icon{background:rgba(100,206,251,.12)}
+.sidebar-footer{padding:12px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.lang-toggle{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:7px;color:var(--muted);font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;font-weight:500;letter-spacing:.5px;transition:all .15s;width:100%}
+.lang-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.logout-btn{width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--muted);font-family:'Inter',sans-serif;font-size:12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:7px}
 .logout-btn:hover{border-color:var(--danger);color:var(--danger)}
-
 .main{margin-left:var(--sidebar);flex:1;min-height:100vh;display:flex;flex-direction:column}
-.topbar{padding:20px 32px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:50}
-.topbar-title{font-size:18px;font-weight:600}
-.topbar-sub{font-size:13px;color:var(--muted)}
-.status-dot{width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;margin-right:6px;box-shadow:0 0 6px var(--success)}
-.new-client-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:8px;padding:9px 18px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .2s}
-.new-client-btn:hover{opacity:.85}
-
-.panel{display:none;flex:1;flex-direction:column;padding:32px}
+.topbar{padding:0 28px;height:58px;border-bottom:1px solid var(--border);display:flex;align-items:center;background:rgba(4,4,10,.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-title{font-size:14px;font-weight:600}
+.panel{display:none;flex:1;flex-direction:column;padding:26px 28px}
 .panel.active{display:flex}
-
-/* NEW CLIENT FORM */
-.new-client-form{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;display:none}
-.new-client-form.open{display:block}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.form-field{display:flex;flex-direction:column;gap:6px}
-.form-field label{font-size:12px;color:var(--muted)}
-.form-field input,.form-field textarea,.form-field select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .2s}
-.form-field input:focus,.form-field textarea:focus{border-color:var(--accent)}
-.form-field textarea{resize:vertical;min-height:70px;font-family:'DM Mono',monospace}
-.form-full{grid-column:1/-1}
-.form-actions{display:flex;gap:10px;margin-top:12px}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:8px;padding:9px 20px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
-.btn-cancel{background:none;border:1px solid var(--border);border-radius:8px;padding:9px 20px;color:var(--muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
-.btn-cancel:hover{border-color:var(--danger);color:var(--danger)}
-
-/* CHAT */
-.chat-container{flex:1;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;max-height:calc(100vh - 160px)}
-.chat-messages{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
-.chat-messages::-webkit-scrollbar{width:4px}
+.chat-container{flex:1;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;max-height:calc(100vh - 130px)}
+.chat-messages{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.chat-messages::-webkit-scrollbar{width:3px}
 .chat-messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.msg{display:flex;gap:12px;max-width:80%}
+.msg{display:flex;gap:9px;max-width:80%}
 .msg.user{align-self:flex-end;flex-direction:row-reverse}
-.msg-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0}
+.msg-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
 .msg.bot .msg-avatar{background:linear-gradient(135deg,var(--accent),var(--accent2))}
 .msg.user .msg-avatar{background:var(--surface2);border:1px solid var(--border)}
-.msg-bubble{padding:12px 16px;border-radius:14px;font-size:14px;line-height:1.6}
-.msg.bot .msg-bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
-.msg.user .msg-bubble{background:linear-gradient(135deg,var(--accent),var(--accent2));border-bottom-right-radius:4px;color:#fff}
-.chat-input-area{padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:12px}
-.chat-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;resize:none;max-height:120px;transition:border-color .2s}
-.chat-input:focus{border-color:var(--accent)}
-.chat-send{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:10px;padding:12px 20px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
-.chat-send:hover{opacity:.85}
-.typing{display:none;align-items:center;gap:6px;color:var(--muted);font-size:13px;padding:4px 16px}
+.msg-bubble{padding:10px 14px;border-radius:13px;font-size:13px;line-height:1.6}
+.msg.bot .msg-bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:3px}
+.msg.user .msg-bubble{background:linear-gradient(135deg,var(--accent),#4db8e8);border-bottom-right-radius:3px;color:#04040a;font-weight:500}
+.typing{display:none;align-items:center;gap:5px;color:var(--muted);font-size:12px;padding:0 18px 8px}
 .typing.show{display:flex}
-.typing-dots{display:flex;gap:4px}
-.typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:dot 1.2s infinite}
+.typing-dots span{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
 .typing-dots span:nth-child(2){animation-delay:.2s}
 .typing-dots span:nth-child(3){animation-delay:.4s}
-@keyframes dot{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
-
-/* INFO PANEL */
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1}
-.info-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px}
-.info-card h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:16px}
-.info-card textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;resize:vertical;min-height:140px;outline:none;line-height:1.6;transition:border-color .2s}
-.info-card textarea:focus{border-color:var(--accent)}
-.info-card input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;margin-bottom:10px;transition:border-color .2s}
-.info-card input:focus{border-color:var(--accent)}
-.save-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:12px}
-.faq-item{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;position:relative}
-.faq-item input{margin-bottom:0}
-.faq-remove{position:absolute;top:10px;right:10px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px}
+@keyframes blink{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.chat-input-area{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:9px}
+.chat-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;resize:none;transition:border-color .2s}
+.chat-input:focus{border-color:rgba(100,206,251,.4)}
+.chat-send{background:linear-gradient(135deg,var(--accent),#4db8e8);border:none;border-radius:9px;padding:10px 16px;color:#04040a;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;flex:1}
+.info-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.info-card h3{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:500}
+.info-card textarea{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:11px;color:var(--text);font-family:monospace;font-size:12px;resize:none;outline:none;min-height:110px;line-height:1.6;transition:border-color .2s}
+.info-card textarea:focus{border-color:rgba(100,206,251,.4)}
+.info-card input{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--text);font-family:'Inter',sans-serif;font-size:12px;outline:none;width:100%;transition:border-color .2s;margin-bottom:7px}
+.info-card input:focus{border-color:rgba(100,206,251,.4)}
+.info-card input::placeholder{color:rgba(255,255,255,.2)}
+.field-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:500}
+.save-btn{background:linear-gradient(135deg,var(--accent),#4db8e8);border:none;border-radius:8px;padding:8px 16px;color:#04040a;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;align-self:flex-start}
+.faq-item{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:9px 11px;position:relative;margin-bottom:7px}
+.faq-item input{margin-bottom:5px}
+.faq-item input:last-of-type{margin-bottom:0}
+.faq-remove{position:absolute;top:7px;right:7px;background:none;border:none;color:var(--muted2);cursor:pointer;font-size:13px}
 .faq-remove:hover{color:var(--danger)}
-.add-faq{background:none;border:1px dashed var(--border);border-radius:8px;padding:10px;color:var(--muted);font-size:13px;cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;transition:all .2s;margin-top:4px}
-.add-faq:hover{border-color:var(--accent);color:var(--accent2)}
-
-/* CALENDAR */
-.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-.cal-nav{display:flex;gap:8px;align-items:center}
-.cal-nav button{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;transition:all .15s}
-.cal-nav button:hover{border-color:var(--accent);color:var(--accent2)}
-.cal-month{font-size:18px;font-weight:600;min-width:200px;text-align:center}
-.cal-grid{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;flex:1}
-.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:var(--surface2)}
-.cal-weekday{padding:12px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.add-faq{background:none;border:1px dashed var(--border);border-radius:7px;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;width:100%;font-family:'Inter',sans-serif;transition:all .2s}
+.add-faq:hover{border-color:var(--accent);color:var(--accent)}
+.cal-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;flex:1}
+.cal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.cal-header h3{font-size:13px;font-weight:600}
+.cal-nav{display:flex;gap:6px;align-items:center}
+.cal-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 10px;color:var(--muted);cursor:pointer;font-size:12px;transition:all .15s}
+.cal-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.cal-month{font-size:13px;font-weight:500;min-width:130px;text-align:center}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)}
+.cal-weekday{padding:9px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 .cal-days{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-day{min-height:90px;padding:8px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;position:relative}
+.cal-day{min-height:74px;padding:6px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
 .cal-day:hover{background:var(--surface2)}
-.cal-day.other-month{opacity:.3}
-.cal-day.today .day-num{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center}
-.day-num{font-size:13px;font-weight:500;margin-bottom:4px;width:26px;height:26px;display:flex;align-items:center;justify-content:center}
-.appt-chip{background:rgba(108,99,255,.2);border:1px solid rgba(108,99,255,.3);border-radius:4px;padding:2px 6px;font-size:11px;color:var(--accent2);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-
-/* CHANNELS */
-.channels-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.channel-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:12px}
-.channel-header{display:flex;align-items:center;gap:12px}
-.channel-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
-.channel-name{font-size:16px;font-weight:600}
-.channel-desc{font-size:13px;color:var(--muted)}
-.connect-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:8px;padding:10px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;width:100%;transition:opacity .2s}
-.connect-btn:hover{opacity:.85}
-.channel-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none;margin-bottom:4px}
-.channel-input:focus{border-color:var(--accent)}
-.status-connected{color:var(--success);font-size:12px;font-weight:500}
-.status-pending{color:var(--warning);font-size:12px}
-
-/* STATS */
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px}
-.stat-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
-.stat-value{font-size:32px;font-weight:600;font-family:'DM Mono',monospace;margin-bottom:4px}
-.stat-change{font-size:12px}
-.stat-change.up{color:var(--success)}
-.charts-row{display:grid;grid-template-columns:2fr 1fr;gap:16px;flex:1}
-.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px}
-.chart-card h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:20px}
-.bar-chart{display:flex;align-items:flex-end;gap:8px;height:180px}
-.bar-group{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
-.bar{width:100%;border-radius:4px 4px 0 0;background:linear-gradient(to top,var(--accent),var(--accent2));min-height:4px}
-.bar-label{font-size:11px;color:var(--muted)}
-.bar-val{font-size:11px;color:var(--text);font-family:'DM Mono',monospace}
-.legend-item{display:flex;align-items:center;gap:8px;font-size:13px}
-.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-
-/* MODAL */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
+.cal-day.other{opacity:.2}
+.cal-day.today .day-n{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#4db8e8);color:#04040a;display:flex;align-items:center;justify-content:center;font-weight:700}
+.day-n{font-size:11px;font-weight:500;margin-bottom:3px;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+.appt-chip{background:rgba(100,206,251,.1);border:1px solid rgba(100,206,251,.18);border-radius:4px;padding:1px 5px;font-size:10px;color:var(--accent);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.appt-chip:hover{background:rgba(100,206,251,.18)}
+.channels-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.channel-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:9px}
+.channel-header{display:flex;align-items:center;gap:10px}
+.channel-icon{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.channel-name{font-size:14px;font-weight:600}
+.channel-desc{font-size:11px;color:var(--muted)}
+.channel-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 11px;color:var(--text);font-family:monospace;font-size:11px;outline:none}
+.status-ok{font-size:11px;color:var(--accent3);font-weight:500}
+.status-pending{font-size:11px;color:var(--warning)}
+.connect-btn{background:linear-gradient(135deg,var(--accent),#4db8e8);border:none;border-radius:7px;padding:8px;color:#04040a;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;width:100%}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat-tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.stat-tile-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px;font-weight:500}
+.stat-tile-value{font-size:26px;font-weight:600;letter-spacing:-.4px}
+.charts-row{display:grid;grid-template-columns:2fr 1fr;gap:12px;flex:1}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+.chart-card h3{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:14px;font-weight:500}
+.bar-chart{display:flex;align-items:flex-end;gap:5px;height:130px}
+.bar-group{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
+.bar{width:100%;border-radius:3px 3px 0 0;background:linear-gradient(to top,rgba(100,206,251,.35),rgba(100,206,251,.8));min-height:3px}
+.bar-lbl{font-size:9px;color:var(--muted)}
+.bar-val{font-size:9px;color:var(--accent);font-weight:600}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(8px)}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:480px;position:relative}
-.modal h3{font-size:18px;font-weight:600;margin-bottom:20px}
-.modal-close{position:absolute;top:20px;right:20px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
-.modal-field{margin-bottom:14px}
-.modal-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-.modal-field input,.modal-field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none}
-.modal-field input:focus{border-color:var(--accent)}
-.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
-.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
-.badge-green{background:rgba(52,211,153,.15);color:var(--success);border:1px solid rgba(52,211,153,.3)}
-.badge-yellow{background:rgba(251,191,36,.15);color:var(--warning);border:1px solid rgba(251,191,36,.3)}
-.detail-row{display:flex;gap:10px;font-size:14px}
-.detail-label{color:var(--muted);min-width:90px}
-.appt-detail{display:flex;flex-direction:column;gap:10px}
-
-/* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 20px;font-size:14px;z-index:2000;transform:translateY(80px);opacity:0;transition:all .3s;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.modal{background:#0a0a14;border:1px solid var(--border2);border-radius:16px;padding:26px;width:100%;max-width:400px;box-shadow:0 40px 100px rgba(0,0,0,.6)}
+.modal-close{float:right;background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer}
+.modal-close:hover{color:var(--text)}
+.modal h3{font-size:15px;font-weight:600;margin-bottom:14px}
+.detail-row{display:flex;gap:10px;font-size:13px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.detail-row:last-child{border-bottom:none}
+.detail-label{color:var(--muted);min-width:75px;font-weight:500}
+.badge{display:inline-flex;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-green{background:rgba(52,211,153,.1);color:var(--accent3);border:1px solid rgba(52,211,153,.22)}
+.badge-yellow{background:rgba(251,191,36,.08);color:var(--warning);border:1px solid rgba(251,191,36,.2)}
+.toast{position:fixed;bottom:22px;right:22px;background:#0a0a14;border:1px solid var(--border2);border-radius:9px;padding:11px 18px;font-size:13px;z-index:9999;transform:translateY(70px);opacity:0;transition:all .3s;pointer-events:none}
 .toast.show{transform:translateY(0);opacity:1}
-.toast.success{border-color:rgba(52,211,153,.4);color:var(--success)}
+.toast.success{border-color:rgba(52,211,153,.4);color:var(--accent3)}
 .toast.error{border-color:rgba(248,113,113,.4);color:var(--danger)}
 </style>
 </head>
 <body>
 
-<!-- SIDEBAR -->
 <aside class="sidebar">
-  <div class="sidebar-logo">
-    <div class="logo-icon">V</div>
-    <div>
-      <div class="logo-text">VAI.ia</div>
-      <div class="logo-sub">ADMIN</div>
+  <div class="sidebar-top">
+    <div class="brand">
+      <div class="brand-circle"><div class="brand-dot"></div></div>
+      <div class="brand-name">VAI<span>.ia</span></div>
     </div>
-  </div>
-  <div class="tenant-section">
-    <label>Active Client</label>
-    <div class="tenant-row">
-      <select class="tenant-select" id="tenantSelect" onchange="switchTenant(this.value)">
-        <option value="">Loading...</option>
-      </select>
-      <button class="delete-btn" onclick="deleteTenant()" title="Delete client">X</button>
+    <button class="back-btn" onclick="window.location.href='/dashboard'">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      <span id="nav-back">All Clients</span>
+    </button>
+    <div class="tenant-badge">
+      <div class="tenant-badge-name" id="tenantName">Loading...</div>
+      <div class="tenant-badge-slug" id="tenantSlug">—</div>
     </div>
+    <button class="client-view-btn" onclick="openClientView()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span id="nav-client-view">Client View</span>
+    </button>
   </div>
   <nav class="nav">
+    <div class="nav-section" id="ns-workspace">Workspace</div>
     <button class="nav-item active" onclick="showPanel('chat',this)">
-      <span class="nav-icon">*</span> Chat AI
+      <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      <span id="nav-chat">Chat AI</span>
     </button>
     <button class="nav-item" onclick="showPanel('info',this)">
-      <span class="nav-icon">i</span> AI Info
+      <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <span id="nav-info">AI Info</span>
     </button>
     <button class="nav-item" onclick="showPanel('calendar',this)">
-      <span class="nav-icon">#</span> Calendar
+      <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <span id="nav-calendar">Calendar</span>
     </button>
     <button class="nav-item" onclick="showPanel('channels',this)">
-      <span class="nav-icon">~</span> Channels
+      <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 18.7"/><path d="M14.05 2a9 9 0 0 1 8 7.94"/><path d="M14.05 6A5 5 0 0 1 18 10"/></svg></div>
+      <span id="nav-channels">Channels</span>
     </button>
     <button class="nav-item" onclick="showPanel('stats',this)">
-      <span class="nav-icon">%</span> Statistics
+      <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+      <span id="nav-stats">Statistics</span>
     </button>
   </nav>
   <div class="sidebar-footer">
-    <button class="logout-btn" onclick="logout()">Sign out</button>
+    <button class="lang-toggle" onclick="toggleLang()" id="langBtn">ES — Espanol</button>
+    <button class="logout-btn" onclick="logout()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span id="nav-logout">Sign out</span>
+    </button>
   </div>
 </aside>
 
-<!-- MAIN -->
 <main class="main">
   <div class="topbar">
-    <div>
-      <div class="topbar-title" id="panelTitle">Chat AI</div>
-      <div class="topbar-sub"><span class="status-dot"></span>Server active &middot; <span id="currentTenantLabel">-</span></div>
-    </div>
-    <button class="new-client-btn" onclick="toggleNewClient()">+ New Client</button>
+    <div class="topbar-title" id="topbar-title">Chat AI</div>
   </div>
 
-  <!-- NEW CLIENT FORM -->
-  <div style="padding:0 32px">
-    <div class="new-client-form" id="newClientForm">
-      <h3 style="margin-bottom:16px;font-size:15px">Create new client</h3>
-      <div class="form-grid">
-        <div class="form-field"><label>Slug (unique ID)</label><input id="nt_slug" placeholder="my-barbershop"></div>
-        <div class="form-field"><label>Business name</label><input id="nt_name" placeholder="My Barbershop"></div>
-        <div class="form-field form-full"><label>System prompt</label><textarea id="nt_system" placeholder="You are the assistant of..."></textarea></div>
-      </div>
-      <div class="form-actions">
-        <button class="btn-primary" onclick="createTenant()">Create client</button>
-        <button class="btn-cancel" onclick="toggleNewClient()">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- PANEL: CHAT -->
+  <!-- CHAT -->
   <div class="panel active" id="panel-chat">
     <div class="chat-container">
       <div class="chat-messages" id="chatMessages">
-        <div class="msg bot">
-          <div class="msg-avatar">V</div>
-          <div class="msg-bubble">Hello! I'm VAI.ia. Test how I respond to your clients. Select an active client in the left panel.</div>
-        </div>
+        <div class="msg bot"><div class="msg-avatar">V</div><div class="msg-bubble" id="chat-init">Loading client...</div></div>
       </div>
-      <div class="typing" id="typing">
-        <div class="typing-dots"><span></span><span></span><span></span></div>
-        Typing...
-      </div>
+      <div class="typing" id="typing"><div class="typing-dots"><span></span><span></span><span></span></div>&nbsp;<span id="typing-text">Typing...</span></div>
       <div class="chat-input-area">
-        <textarea class="chat-input" id="chatInput" placeholder="Write a test message..." rows="1" onkeydown="handleKey(event)"></textarea>
-        <button class="chat-send" onclick="sendMessage()">Send</button>
+        <textarea class="chat-input" id="chatInput" rows="1" id="chat-placeholder" placeholder="Write a test message..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+        <button class="chat-send" onclick="sendMessage()" id="btn-send">Send</button>
       </div>
     </div>
   </div>
 
-  <!-- PANEL: INFO -->
+  <!-- INFO -->
   <div class="panel" id="panel-info">
     <div class="info-grid">
       <div class="info-card">
-        <h3>System Prompt</h3>
-        <textarea id="systemPrompt" placeholder="You are the assistant of [Business]. Help schedule appointments, answer questions and provide business information. Always be friendly and professional."></textarea>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
-          <div class="form-field"><label>Business</label><input id="var_business" placeholder="My Business"></div>
-          <div class="form-field"><label>Phone</label><input id="var_phone" placeholder="+1 555 0000"></div>
-          <div class="form-field"><label>Address</label><input id="var_address" placeholder="123 Main St"></div>
-          <div class="form-field"><label>Hours</label><input id="var_hours" placeholder="Mon-Fri 9am-6pm"></div>
-          <div class="form-field"><label>Timezone</label><input id="var_timezone" placeholder="America/Denver"></div>
-          <div class="form-field"><label>Policy</label><input id="var_policy" placeholder="24h cancellation notice"></div>
-          <div class="form-field"><label>Twilio Number</label><input id="var_twilio" placeholder="+19477292223"></div>
+        <h3 id="info-system-title">System Prompt</h3>
+        <textarea id="systemPrompt" placeholder="You are the assistant of..."></textarea>
+        <div>
+          <div class="field-lbl" id="lbl-business">Business</div><input id="var_business" placeholder="My Business">
+          <div class="field-lbl" id="lbl-phone">Phone</div><input id="var_phone" placeholder="+1 555 0000">
+          <div class="field-lbl" id="lbl-address">Address</div><input id="var_address" placeholder="123 Main St">
+          <div class="field-lbl" id="lbl-hours">Hours</div><input id="var_hours" placeholder="Mon-Fri 9am-6pm">
+          <div class="field-lbl" id="lbl-policy">Policy</div><input id="var_policy" placeholder="24h cancellation">
+          <div class="field-lbl" id="lbl-twilio">Twilio Number</div><input id="var_twilio" placeholder="+19477292223">
         </div>
-        <button class="save-btn" onclick="saveInfo()">Save changes</button>
+        <button class="save-btn" onclick="saveInfo()" id="btn-save">Save changes</button>
       </div>
       <div class="info-card">
-        <h3>FAQ</h3>
-        <div id="faqList"></div>
-        <button class="add-faq" onclick="addFaq()">+ Add question</button>
-        <button class="save-btn" onclick="saveInfo()">Save FAQ</button>
+        <h3 id="info-faq-title">FAQ</h3>
+        <div id="faqList" style="flex:1;overflow-y:auto"></div>
+        <button class="add-faq" onclick="addFaq()" id="btn-add-faq">+ Add question</button>
+        <button class="save-btn" onclick="saveInfo()" id="btn-save-faq">Save FAQ</button>
       </div>
     </div>
   </div>
 
-  <!-- PANEL: CALENDAR -->
+  <!-- CALENDAR -->
   <div class="panel" id="panel-calendar" style="flex-direction:column">
-    <div class="cal-header">
-      <div class="cal-nav">
-        <button onclick="changeMonth(-1)">&#8249;</button>
-        <span class="cal-month" id="calMonth">April 2026</span>
-        <button onclick="changeMonth(1)">&#8250;</button>
+    <div class="cal-wrap">
+      <div class="cal-header">
+        <h3 id="cal-title">Calendar</h3>
+        <div class="cal-nav">
+          <button class="cal-btn" onclick="changeMonth(-1)">&#8249;</button>
+          <span class="cal-month" id="calMonth">May 2026</span>
+          <button class="cal-btn" onclick="changeMonth(1)">&#8250;</button>
+        </div>
       </div>
-      <button class="save-btn" onclick="openNewAppt()">+ New Appointment</button>
-    </div>
-    <div class="cal-grid">
       <div class="cal-weekdays">
-        <div class="cal-weekday">Sun</div><div class="cal-weekday">Mon</div>
-        <div class="cal-weekday">Tue</div><div class="cal-weekday">Wed</div>
-        <div class="cal-weekday">Thu</div><div class="cal-weekday">Fri</div>
-        <div class="cal-weekday">Sat</div>
+        <div class="cal-weekday" id="dn0">Sun</div><div class="cal-weekday" id="dn1">Mon</div>
+        <div class="cal-weekday" id="dn2">Tue</div><div class="cal-weekday" id="dn3">Wed</div>
+        <div class="cal-weekday" id="dn4">Thu</div><div class="cal-weekday" id="dn5">Fri</div>
+        <div class="cal-weekday" id="dn6">Sat</div>
       </div>
       <div class="cal-days" id="calDays"></div>
     </div>
   </div>
 
-  <!-- PANEL: CHANNELS -->
+  <!-- CHANNELS -->
   <div class="panel" id="panel-channels">
     <div class="channels-grid">
-      <div class="channel-card">
-        <div class="channel-header">
-          <div class="channel-icon" style="background:rgba(37,211,102,.1);color:#25d366;font-weight:700">W</div>
-          <div><div class="channel-name">WhatsApp</div><div class="channel-desc">Twilio WhatsApp API</div></div>
-        </div>
-        <input class="channel-input" id="wa_number" placeholder="whatsapp:+14155238886">
-        <div class="status-pending">Not configured</div>
-        <button class="connect-btn" onclick="showToast('Save your Twilio number in AI Info tab','success')">Connect WhatsApp</button>
-      </div>
-      <div class="channel-card">
-        <div class="channel-header">
-          <div class="channel-icon" style="background:rgba(0,122,255,.1);color:#007aff;font-weight:700">S</div>
-          <div><div class="channel-name">SMS</div><div class="channel-desc">Twilio SMS</div></div>
-        </div>
-        <div class="status-connected">Configured &mdash; Webhook: /webhook/sms</div>
-        <button class="connect-btn" onclick="showToast('SMS ready. Configure webhook in Twilio Console','success')">Test SMS</button>
-      </div>
-      <div class="channel-card">
-        <div class="channel-header">
-          <div class="channel-icon" style="background:rgba(225,48,108,.1);color:#e1306c;font-weight:700">I</div>
-          <div><div class="channel-name">Instagram DM</div><div class="channel-desc">Meta Webhooks</div></div>
-        </div>
-        <input class="channel-input" id="ig_token" placeholder="Page Access Token">
-        <div class="status-pending">Not connected</div>
-        <button class="connect-btn" onclick="showToast('Configure Meta webhook: /webhook/instagram','success')">Connect Instagram</button>
-      </div>
-      <div class="channel-card">
-        <div class="channel-header">
-          <div class="channel-icon" style="background:rgba(24,119,242,.1);color:#1877f2;font-weight:700">F</div>
-          <div><div class="channel-name">Facebook</div><div class="channel-desc">Meta Messenger</div></div>
-        </div>
-        <input class="channel-input" id="fb_token" placeholder="Page Access Token">
-        <div class="status-pending">Not connected</div>
-        <button class="connect-btn" onclick="showToast('Configure Meta webhook: /webhook/facebook','success')">Connect Facebook</button>
-      </div>
-      <div class="channel-card">
-        <div class="channel-header">
-          <div class="channel-icon" style="background:rgba(108,99,255,.1);color:#6c63ff;font-weight:700">V</div>
-          <div><div class="channel-name">Voice Calls</div><div class="channel-desc">Twilio Voice (TwiML)</div></div>
-        </div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.6">Webhook: <code style="color:var(--accent2)">/webhook/voice</code><br>Configure in Twilio Console on your number.</div>
-        <div class="status-pending">Requires Twilio configuration</div>
-        <button class="connect-btn" onclick="showToast('Configure voice webhook in Twilio Console','success')">View instructions</button>
-      </div>
-      <div class="channel-card">
-        <div class="channel-header">
-          <div class="channel-icon" style="background:rgba(52,211,153,.1);color:#34d399;font-weight:700">@</div>
-          <div><div class="channel-name">Email</div><div class="channel-desc">SMTP Gmail</div></div>
-        </div>
-        <div class="status-connected">Connected &mdash; vai.virtualassitant@gmail.com</div>
-        <button class="connect-btn" onclick="testEmail()">Send test email</button>
-      </div>
+      <div class="channel-card"><div class="channel-header"><div class="channel-icon" style="background:rgba(37,211,102,.1);color:#25d366">WA</div><div><div class="channel-name">WhatsApp</div><div class="channel-desc">Twilio WhatsApp API</div></div></div><input class="channel-input" placeholder="whatsapp:+1415..."><div class="status-pending" id="ch-wa-status">Webhook: /webhook/sms</div><button class="connect-btn" onclick="showToast('Save Twilio number in AI Info','success')" id="btn-connect-wa">Connect</button></div>
+      <div class="channel-card"><div class="channel-header"><div class="channel-icon" style="background:rgba(0,122,255,.1);color:#007aff">SMS</div><div><div class="channel-name">SMS</div><div class="channel-desc">Twilio SMS</div></div></div><div class="status-ok" id="ch-sms-status">Ready — /webhook/sms</div><button class="connect-btn" onclick="showToast('SMS ready','success')" id="btn-test-sms">Test SMS</button></div>
+      <div class="channel-card"><div class="channel-header"><div class="channel-icon" style="background:rgba(225,48,108,.1);color:#e1306c">IG</div><div><div class="channel-name">Instagram DM</div><div class="channel-desc">Meta Webhooks</div></div></div><input class="channel-input" placeholder="Page Access Token"><div class="status-pending" id="ch-ig-status">Not connected</div><button class="connect-btn" onclick="showToast('Configure: /webhook/instagram','success')" id="btn-connect-ig">Connect</button></div>
+      <div class="channel-card"><div class="channel-header"><div class="channel-icon" style="background:rgba(24,119,242,.1);color:#1877f2">FB</div><div><div class="channel-name">Facebook</div><div class="channel-desc">Meta Messenger</div></div></div><input class="channel-input" placeholder="Page Access Token"><div class="status-pending" id="ch-fb-status">Not connected</div><button class="connect-btn" onclick="showToast('Configure: /webhook/facebook','success')" id="btn-connect-fb">Connect</button></div>
+      <div class="channel-card"><div class="channel-header"><div class="channel-icon" style="background:rgba(52,211,153,.1);color:#34d399">@</div><div><div class="channel-name">Email</div><div class="channel-desc">SMTP Gmail</div></div></div><div class="status-ok" id="ch-email-status">Connected</div><button class="connect-btn" onclick="showToast('Email connected','success')" id="btn-test-email">Send test</button></div>
     </div>
   </div>
 
-  <!-- PANEL: STATS -->
+  <!-- STATS -->
   <div class="panel" id="panel-stats" style="flex-direction:column">
     <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Total appointments</div>
-        <div class="stat-value" id="st_total">0</div>
-        <div class="stat-change up" id="st_total_ch">this month</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">This week</div>
-        <div class="stat-value" id="st_week">0</div>
-        <div class="stat-change">last 7 days</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Effectiveness</div>
-        <div class="stat-value" id="st_rate">0%</div>
-        <div class="stat-change up">confirmed/scheduled</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Today</div>
-        <div class="stat-value" id="st_today">0</div>
-        <div class="stat-change">appointments scheduled</div>
-      </div>
+      <div class="stat-tile"><div class="stat-tile-label" id="st-total-lbl">Total</div><div class="stat-tile-value" id="st_total">0</div></div>
+      <div class="stat-tile"><div class="stat-tile-label" id="st-week-lbl">This Week</div><div class="stat-tile-value" id="st_week">0</div></div>
+      <div class="stat-tile"><div class="stat-tile-label" id="st-confirmed-lbl">Confirmed</div><div class="stat-tile-value" id="st_confirmed">0</div></div>
+      <div class="stat-tile"><div class="stat-tile-label" id="st-today-lbl">Today</div><div class="stat-tile-value" id="st_today">0</div></div>
     </div>
     <div class="charts-row">
-      <div class="chart-card">
-        <h3>Appointments by month</h3>
-        <div class="bar-chart" id="barChart"></div>
-      </div>
-      <div class="chart-card">
-        <h3>By day of week</h3>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px" id="dayChart"></div>
-      </div>
+      <div class="chart-card"><h3 id="chart-month-title">Appointments by Month</h3><div class="bar-chart" id="barChart"></div></div>
+      <div class="chart-card"><h3 id="chart-day-title">By Day of Week</h3><div id="dayChart"></div></div>
     </div>
   </div>
 </main>
 
-<!-- MODAL APPOINTMENT -->
+<!-- APPT MODAL -->
 <div class="modal-overlay" id="apptModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeModal()">x</button>
-    <h3 id="modalTitle">New appointment</h3>
-    <div id="modalContent">
-      <div class="modal-field"><label>Client name</label><input id="appt_name" placeholder="John Smith"></div>
-      <div class="modal-field"><label>Service</label><input id="appt_service" placeholder="Haircut"></div>
-      <div class="modal-row">
-        <div class="modal-field"><label>Start</label><input type="datetime-local" id="appt_start"></div>
-        <div class="modal-field"><label>End</label><input type="datetime-local" id="appt_end"></div>
-      </div>
-      <div class="modal-field"><label>Notes</label><input id="appt_notes" placeholder="Optional..."></div>
-    </div>
-    <div class="modal-actions" id="modalActions">
-      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn-primary" onclick="saveAppt()">Save appointment</button>
-    </div>
+    <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    <h3 id="modal-title">Appointment</h3>
+    <div id="modal-content"></div>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
+let lang = 'en';
 let currentTenant = '';
+let tenantConfig = {};
+let appointments = [];
+let sessionId = Math.random().toString(36).slice(2);
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
-let appointments = [];
-let sessionId = null;
-let tenantConfig = {};
 
-(async () => {
-  await loadTenants();
-  sessionId = Math.random().toString(36).slice(2);
-})();
+const T = {
+  en:{
+    back:'All Clients', clientView:'Client View', nsWorkspace:'Workspace',
+    navChat:'Chat AI', navInfo:'AI Info', navCalendar:'Calendar', navChannels:'Channels', navStats:'Statistics', navLogout:'Sign out',
+    langBtn:'ES — Espanol',
+    topbar:{chat:'Chat AI', info:'AI Info', calendar:'Calendar', channels:'Channels', stats:'Statistics'},
+    chatInit:'Send a message to test the AI for this client.',
+    chatPlaceholder:'Write a test message...',
+    btnSend:'Send',
+    infoSystemTitle:'System Prompt', infoFaqTitle:'FAQ',
+    lblBusiness:'Business', lblPhone:'Phone', lblAddress:'Address', lblHours:'Hours', lblPolicy:'Policy', lblTwilio:'Twilio Number',
+    btnSave:'Save changes', btnAddFaq:'+ Add question', btnSaveFaq:'Save FAQ',
+    calTitle:'Calendar', dayNames:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    months:['January','February','March','April','May','June','July','August','September','October','November','December'],
+    shortMonths:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    stTotal:'Total', stWeek:'This Week', stConfirmed:'Confirmed', stToday:'Today',
+    chartMonth:'Appointments by Month', chartDay:'By Day of Week',
+    confirmed:'Confirmed', pending:'Pending',
+    service:'Service', start:'Start', end:'End', status:'Status', notes:'Notes',
+    typingText:'Typing...',
+  },
+  es:{
+    back:'Todos los Clientes', clientView:'Vista de Cliente', nsWorkspace:'Espacio de Trabajo',
+    navChat:'Chat IA', navInfo:'Info IA', navCalendar:'Calendario', navChannels:'Canales', navStats:'Estadisticas', navLogout:'Cerrar sesion',
+    langBtn:'EN — English',
+    topbar:{chat:'Chat IA', info:'Info IA', calendar:'Calendario', channels:'Canales', stats:'Estadisticas'},
+    chatInit:'Envia un mensaje para probar la IA de este cliente.',
+    chatPlaceholder:'Escribe un mensaje de prueba...',
+    btnSend:'Enviar',
+    infoSystemTitle:'Prompt del Sistema', infoFaqTitle:'FAQ',
+    lblBusiness:'Negocio', lblPhone:'Telefono', lblAddress:'Direccion', lblHours:'Horarios', lblPolicy:'Politica', lblTwilio:'Numero Twilio',
+    btnSave:'Guardar cambios', btnAddFaq:'+ Agregar pregunta', btnSaveFaq:'Guardar FAQ',
+    calTitle:'Calendario', dayNames:['Dom','Lun','Mar','Mie','Jue','Vie','Sab'],
+    months:['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
+    shortMonths:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+    stTotal:'Total', stWeek:'Esta Semana', stConfirmed:'Confirmadas', stToday:'Hoy',
+    chartMonth:'Citas por Mes', chartDay:'Por Dia de Semana',
+    confirmed:'Confirmada', pending:'Pendiente',
+    service:'Servicio', start:'Inicio', end:'Fin', status:'Estado', notes:'Notas',
+    typingText:'Escribiendo...',
+  }
+};
 
-async function loadTenants() {
-  try {
-    const res = await fetch('/admin/api/tenants', {credentials:'include'});
-    const data = await res.json();
-    const sel = document.getElementById('tenantSelect');
-    sel.innerHTML = '';
-    if (!data.tenants || data.tenants.length === 0) {
-      sel.innerHTML = '<option value="">No clients</option>';
-      return;
-    }
-    data.tenants.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t; opt.textContent = t;
-      sel.appendChild(opt);
-    });
-    currentTenant = data.tenants[0];
-    document.getElementById('currentTenantLabel').textContent = currentTenant;
-    sel.value = currentTenant;
-    await loadTenantConfig();
-    renderCalendar();
-    loadStats();
-  } catch(e) { console.error(e); }
+function applyLang() {
+  const d = T[lang];
+  document.getElementById('nav-back').textContent = d.back;
+  document.getElementById('nav-client-view').textContent = d.clientView;
+  document.getElementById('ns-workspace').textContent = d.nsWorkspace;
+  document.getElementById('nav-chat').textContent = d.navChat;
+  document.getElementById('nav-info').textContent = d.navInfo;
+  document.getElementById('nav-calendar').textContent = d.navCalendar;
+  document.getElementById('nav-channels').textContent = d.navChannels;
+  document.getElementById('nav-stats').textContent = d.navStats;
+  document.getElementById('nav-logout').textContent = d.navLogout;
+  document.getElementById('langBtn').textContent = d.langBtn;
+  document.getElementById('info-system-title').textContent = d.infoSystemTitle;
+  document.getElementById('info-faq-title').textContent = d.infoFaqTitle;
+  document.getElementById('lbl-business').textContent = d.lblBusiness;
+  document.getElementById('lbl-phone').textContent = d.lblPhone;
+  document.getElementById('lbl-address').textContent = d.lblAddress;
+  document.getElementById('lbl-hours').textContent = d.lblHours;
+  document.getElementById('lbl-policy').textContent = d.lblPolicy;
+  document.getElementById('lbl-twilio').textContent = d.lblTwilio;
+  document.getElementById('btn-save').textContent = d.btnSave;
+  document.getElementById('btn-add-faq').textContent = d.btnAddFaq;
+  document.getElementById('btn-save-faq').textContent = d.btnSaveFaq;
+  document.getElementById('btn-send').textContent = d.btnSend;
+  document.getElementById('cal-title').textContent = d.calTitle;
+  document.getElementById('st-total-lbl').textContent = d.stTotal;
+  document.getElementById('st-week-lbl').textContent = d.stWeek;
+  document.getElementById('st-confirmed-lbl').textContent = d.stConfirmed;
+  document.getElementById('st-today-lbl').textContent = d.stToday;
+  document.getElementById('chart-month-title').textContent = d.chartMonth;
+  document.getElementById('chart-day-title').textContent = d.chartDay;
+  document.getElementById('typing-text').textContent = d.typingText;
+  for(let i=0;i<7;i++) document.getElementById('dn'+i).textContent = d.dayNames[i];
+  document.documentElement.lang = lang;
+  renderCalendar();
 }
 
-function switchTenant(slug) {
+function toggleLang() {
+  lang = lang==='en'?'es':'en';
+  applyLang();
+}
+
+// INIT
+(async()=>{
+  const slug = window.location.pathname.split('/').filter(Boolean)[1];
+  if(!slug) return window.location.href='/dashboard';
   currentTenant = slug;
-  document.getElementById('currentTenantLabel').textContent = slug;
-  loadTenantConfig();
+  document.getElementById('tenantName').textContent = slug;
+  document.getElementById('tenantSlug').textContent = '/admin/' + slug;
+  document.getElementById('chat-init').textContent = 'Testing AI for: ' + slug + '. Send a message to test.';
+  await Promise.all([loadTenantConfig(), loadAppointments()]);
   renderCalendar();
   loadStats();
-}
-
-async function deleteTenant() {
-  if (!currentTenant) return showToast('Select a client first','error');
-  if (!confirm('Delete client: ' + currentTenant + '? This cannot be undone.')) return;
-  try {
-    const res = await fetch('/admin/api/tenant/' + currentTenant, {method:'DELETE', credentials:'include'});
-    const d = await res.json();
-    if (d.ok) { showToast('Client deleted','success'); currentTenant=''; await loadTenants(); }
-    else showToast('Error: ' + (d.error||'unknown'),'error');
-  } catch { showToast('Connection error','error'); }
-}
+})();
 
 async function loadTenantConfig() {
-  if (!currentTenant) return;
   try {
-    const res = await fetch('/admin/api/tenant/' + currentTenant, {credentials:'include'});
+    const res = await fetch('/admin/api/tenant/'+currentTenant,{credentials:'include'});
     tenantConfig = await res.json();
-    document.getElementById('systemPrompt').value = tenantConfig.system || '';
-    document.getElementById('var_business').value = tenantConfig.vars?.business || tenantConfig.vars?.name || '';
-    document.getElementById('var_phone').value = tenantConfig.vars?.phone || '';
-    document.getElementById('var_address').value = tenantConfig.vars?.address || '';
-    document.getElementById('var_hours').value = tenantConfig.vars?.hours || '';
-    document.getElementById('var_timezone').value = tenantConfig.vars?.timezone || 'America/Denver';
-    document.getElementById('var_policy').value = tenantConfig.vars?.policy || '';
-    document.getElementById('var_twilio').value = tenantConfig.vars?.twilio_number || tenantConfig.twilio_number || '';
-    renderFaq(tenantConfig.faq || []);
-  } catch(e) {}
-}
-
-function renderFaq(faqs) {
-  const list = document.getElementById('faqList');
-  list.innerHTML = '';
-  faqs.forEach((faq, i) => {
-    list.innerHTML += `<div class="faq-item" id="faq_${i}">
-      <input placeholder="Question" value="${faq.q||''}" id="fq_q_${i}">
-      <input placeholder="Answer" value="${faq.a||''}" id="fq_a_${i}">
-      <button class="faq-remove" onclick="this.parentElement.remove()">x</button>
-    </div>`;
-  });
-}
-
-function addFaq() {
-  const list = document.getElementById('faqList');
-  const i = list.children.length;
-  const div = document.createElement('div');
-  div.className = 'faq-item'; div.id = 'faq_' + i;
-  div.innerHTML = `<input placeholder="Question" id="fq_q_${i}"><input placeholder="Answer" id="fq_a_${i}"><button class="faq-remove" onclick="this.parentElement.remove()">x</button>`;
-  list.appendChild(div);
-}
-
-async function saveInfo() {
-  if (!currentTenant) return showToast('Select a client first','error');
-  const faqs = [];
-  document.querySelectorAll('.faq-item').forEach(el => {
-    const q = el.querySelector('input:first-of-type')?.value;
-    const a = el.querySelector('input:last-of-type')?.value;
-    if (q && a) faqs.push({q,a});
-  });
-  const twilio_number = document.getElementById('var_twilio').value.trim();
-  const config = {
-    twilio_number,
-    system: document.getElementById('systemPrompt').value,
-    vars: {
-      business: document.getElementById('var_business').value,
-      name: document.getElementById('var_business').value,
-      phone: document.getElementById('var_phone').value,
-      address: document.getElementById('var_address').value,
-      hours: document.getElementById('var_hours').value,
-      timezone: document.getElementById('var_timezone').value,
-      policy: document.getElementById('var_policy').value,
-      twilio_number,
-    },
-    faq: faqs
-  };
-  try {
-    const res = await fetch('/admin/api/tenant/save', {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({slug: currentTenant, config})
-    });
-    const d = await res.json();
-    if (d.ok) showToast('Saved successfully','success');
-    else showToast('Error saving','error');
-  } catch { showToast('Connection error','error'); }
-}
-
-async function createTenant() {
-  const slug = document.getElementById('nt_slug').value.trim().toLowerCase().replace(/\s/g,'-');
-  const name = document.getElementById('nt_name').value.trim();
-  const system = document.getElementById('nt_system').value.trim();
-  if (!slug) return showToast('Slug is required','error');
-  const config = {
-    system: system || 'You are the assistant of ' + name + '. CRITICAL RULE: Always respond in the EXACT same language the user writes in. Be friendly and professional.',
-    vars:{business:name,name},
-    faq:[]
-  };
-  try {
-    const res = await fetch('/admin/api/tenant/save', {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({slug, config})
-    });
-    const d = await res.json();
-    if (d.ok) { showToast('Client created','success'); toggleNewClient(); loadTenants(); }
-    else showToast('Error','error');
-  } catch { showToast('Error','error'); }
-}
-
-function toggleNewClient() {
-  document.getElementById('newClientForm').classList.toggle('open');
-}
-
-async function sendMessage() {
-  const input = document.getElementById('chatInput');
-  const text = input.value.trim();
-  if (!text || !currentTenant) return;
-  input.value = '';
-  appendMsg(text, 'user');
-  document.getElementById('typing').classList.add('show');
-  try {
-    const res = await fetch('/api/chat', {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({slug: currentTenant, sessionId, prompt: text})
-    });
-    const d = await res.json();
-    document.getElementById('typing').classList.remove('show');
-    appendMsg(d.reply || '(no response)', 'bot');
-  } catch {
-    document.getElementById('typing').classList.remove('show');
-    appendMsg('Connection error.', 'bot');
-  }
-}
-
-function appendMsg(text, role) {
-  const msgs = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = 'msg ' + role;
-  div.innerHTML = '<div class="msg-avatar">' + (role==='bot'?'V':'U') + '</div><div class="msg-bubble">' + text.replace(/\n/g,'<br>') + '</div>';
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-}
-
-async function loadAppointments() {
-  if (!currentTenant) return;
-  try {
-    const res = await fetch('/admin/api/appointments/' + currentTenant, {credentials:'include'});
-    const d = await res.json();
-    appointments = d.appointments || [];
-  } catch { appointments = []; }
-}
-
-async function renderCalendar() {
-  await loadAppointments();
-  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  document.getElementById('calMonth').textContent = months[calMonth] + ' ' + calYear;
-  const first = new Date(calYear, calMonth, 1);
-  const last = new Date(calYear, calMonth+1, 0);
-  const today = new Date();
-  const container = document.getElementById('calDays');
-  container.innerHTML = '';
-  for (let i = 0; i < first.getDay(); i++) {
-    const d = document.createElement('div'); d.className = 'cal-day other-month'; container.appendChild(d);
-  }
-  for (let day = 1; day <= last.getDate(); day++) {
-    const d = document.createElement('div'); d.className = 'cal-day';
-    const isToday = today.getDate()===day && today.getMonth()===calMonth && today.getFullYear()===calYear;
-    if (isToday) d.classList.add('today');
-    d.innerHTML = '<div class="day-num">' + day + '</div>';
-    const dayAppts = appointments.filter(a => {
-      const s = new Date(a.start);
-      return s.getDate()===day && s.getMonth()===calMonth && s.getFullYear()===calYear;
-    });
-    dayAppts.forEach(a => {
-      const chip = document.createElement('div'); chip.className = 'appt-chip';
-      const t = new Date(a.start).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
-      chip.textContent = t + ' ' + (a.service||a.customer_name||'Appt');
-      chip.onclick = (e) => { e.stopPropagation(); openApptDetail(a); };
-      d.appendChild(chip);
-    });
-    d.onclick = () => openNewApptOnDay(day);
-    container.appendChild(d);
-  }
-}
-
-function changeMonth(dir) {
-  calMonth += dir;
-  if (calMonth > 11) { calMonth = 0; calYear++; }
-  if (calMonth < 0) { calMonth = 11; calYear--; }
-  renderCalendar();
-}
-
-function toLocalInput(d) {
-  const pad = n => String(n).padStart(2,'0');
-  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
-}
-
-function openNewAppt() {
-  const now = new Date();
-  const end = new Date(now.getTime()+30*60000);
-  document.getElementById('modalTitle').textContent = 'New appointment';
-  document.getElementById('modalContent').innerHTML = `
-    <div class="modal-field"><label>Client name</label><input id="appt_name" placeholder="John Smith"></div>
-    <div class="modal-field"><label>Service</label><input id="appt_service" placeholder="Haircut"></div>
-    <div class="modal-row">
-      <div class="modal-field"><label>Start</label><input type="datetime-local" id="appt_start" value="${toLocalInput(now)}"></div>
-      <div class="modal-field"><label>End</label><input type="datetime-local" id="appt_end" value="${toLocalInput(end)}"></div>
-    </div>
-    <div class="modal-field"><label>Notes</label><input id="appt_notes" placeholder="Optional..."></div>`;
-  document.getElementById('modalActions').innerHTML = '<button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveAppt()">Save</button>';
-  document.getElementById('apptModal').classList.add('open');
-}
-
-function openNewApptOnDay(day) {
-  openNewAppt();
-  const d = new Date(calYear, calMonth, day, 10, 0);
-  document.getElementById('appt_start').value = toLocalInput(d);
-  document.getElementById('appt_end').value = toLocalInput(new Date(d.getTime()+30*60000));
-}
-
-function openApptDetail(a) {
-  const start = new Date(a.start), end = new Date(a.end||a.start);
-  document.getElementById('modalTitle').textContent = a.service || 'Appointment';
-  document.getElementById('modalContent').innerHTML = `<div class="appt-detail">
-    <div class="detail-row"><span class="detail-label">Client</span><span>${a.customer_name||a.client_name||'—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Service</span><span>${a.service||'—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Start</span><span>${start.toLocaleString('en')}</span></div>
-    <div class="detail-row"><span class="detail-label">End</span><span>${end.toLocaleString('en')}</span></div>
-    <div class="detail-row"><span class="detail-label">Status</span><span class="badge ${a.confirmed?'badge-green':'badge-yellow'}">${a.confirmed?'Confirmed':'Pending'}</span></div>
-    ${a.notes?'<div class="detail-row"><span class="detail-label">Notes</span><span>'+a.notes+'</span></div>':''}
-  </div>`;
-  document.getElementById('modalActions').innerHTML = '<button class="btn-cancel" onclick="deleteAppt(\''+a.id+'\')">Delete</button><button class="btn-primary" onclick="closeModal()">Close</button>';
-  document.getElementById('apptModal').classList.add('open');
-}
-
-async function saveAppt() {
-  const start = document.getElementById('appt_start').value;
-  const end = document.getElementById('appt_end').value;
-  if (!start||!end) return showToast('Complete date and time','error');
-  const body = {
-    customer_name: document.getElementById('appt_name').value,
-    service: document.getElementById('appt_service').value,
-    start: new Date(start).toISOString(),
-    end: new Date(end).toISOString(),
-    notes: document.getElementById('appt_notes')?.value
-  };
-  try {
-    const res = await fetch('/admin/api/appointments/' + currentTenant, {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-    const d = await res.json();
-    if (d.ok) { showToast('Appointment saved','success'); closeModal(); renderCalendar(); }
-    else showToast('Error saving','error');
-  } catch { showToast('Error','error'); }
-}
-
-async function deleteAppt(id) {
-  if (!confirm('Delete this appointment?')) return;
-  try {
-    await fetch('/admin/api/appointments/' + id + '?slug=' + currentTenant, {method:'DELETE', credentials:'include'});
-    showToast('Appointment deleted','success');
-    closeModal(); renderCalendar();
-  } catch { showToast('Error','error'); }
-}
-
-function closeModal() { document.getElementById('apptModal').classList.remove('open'); }
-
-async function testEmail() {
-  try {
-    const res = await fetch('/test-mail', {credentials:'include'});
-    const d = await res.json();
-    if (d.ok) showToast('Test email sent','success');
-    else showToast('Error: '+d.error,'error');
-  } catch { showToast('Error','error'); }
-}
-
-async function loadStats() {
-  if (!currentTenant) return;
-  try {
-    const res = await fetch('/admin/api/appointments/' + currentTenant, {credentials:'include'});
-    const d = await res.json();
-    const appts = d.appointments || [];
-    const now = new Date();
-    const today = appts.filter(a => new Date(a.start).toDateString()===now.toDateString()).length;
-    const week = appts.filter(a => (now-new Date(a.start))<7*24*60*60*1000 && new Date(a.start)<=now).length;
-    const confirmed = appts.filter(a => a.confirmed).length;
-    const rate = appts.length ? Math.round(confirmed/appts.length*100) : 0;
-    document.getElementById('st_total').textContent = appts.length;
-    document.getElementById('st_week').textContent = week;
-    document.getElementById('st_today').textContent = today;
-    document.getElementById('st_rate').textContent = rate+'%';
-    renderBarChart(appts);
-    renderDayChart(appts);
+    document.getElementById('systemPrompt').value = tenantConfig.system||'';
+    document.getElementById('var_business').value = tenantConfig.vars?.business||tenantConfig.vars?.name||'';
+    document.getElementById('var_phone').value = tenantConfig.vars?.phone||'';
+    document.getElementById('var_address').value = tenantConfig.vars?.address||'';
+    document.getElementById('var_hours').value = tenantConfig.vars?.hours||'';
+    document.getElementById('var_policy').value = tenantConfig.vars?.policy||'';
+    document.getElementById('var_twilio').value = tenantConfig.vars?.twilio_number||tenantConfig.twilio_number||'';
+    renderFaq(tenantConfig.faq||[]);
   } catch {}
 }
 
-function renderBarChart(appts) {
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const counts = Array(12).fill(0);
-  appts.forEach(a => { counts[new Date(a.start).getMonth()]++; });
-  const max = Math.max(...counts, 1);
-  const chart = document.getElementById('barChart');
-  chart.innerHTML = '';
-  months.forEach((m,i) => {
-    const h = Math.round((counts[i]/max)*160);
-    chart.innerHTML += '<div class="bar-group"><div class="bar-val">'+(counts[i]||'')+'</div><div class="bar" style="height:'+h+'px"></div><div class="bar-label">'+m+'</div></div>';
-  });
+function renderFaq(faqs) {
+  document.getElementById('faqList').innerHTML = faqs.map((f,i)=>
+    '<div class="faq-item" id="faq_'+i+'"><input placeholder="Question" value="'+(f.q||'')+'" id="fq_q_'+i+'" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:11px;outline:none;margin-bottom:5px"><input placeholder="Answer" value="'+(f.a||'')+'" id="fq_a_'+i+'" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:11px;outline:none"><button class="faq-remove" onclick="this.parentElement.remove()">x</button></div>'
+  ).join('');
 }
 
-function renderDayChart(appts) {
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const counts = Array(7).fill(0);
-  appts.forEach(a => { counts[new Date(a.start).getDay()]++; });
-  const max = Math.max(...counts,1);
-  const colors = ['#6c63ff','#a78bfa','#818cf8','#7c3aed','#4f46e5','#8b5cf6','#c4b5fd'];
-  const chart = document.getElementById('dayChart');
-  chart.innerHTML = days.map((d,i) => {
-    const pct = Math.round(counts[i]/max*100);
-    return '<div class="legend-item"><div class="legend-dot" style="background:'+colors[i]+'"></div><span style="flex:1">'+d+'</span><div style="width:'+pct+'%;height:6px;background:'+colors[i]+';border-radius:3px;min-width:4px"></div><span style="font-family:monospace;font-size:11px;color:var(--muted);width:20px;text-align:right">'+counts[i]+'</span></div>';
+function addFaq(){
+  const i=document.querySelectorAll('.faq-item').length;
+  const d=document.createElement('div');d.className='faq-item';d.id='faq_'+i;
+  d.innerHTML='<input placeholder="Question" id="fq_q_'+i+'" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:11px;outline:none;margin-bottom:5px"><input placeholder="Answer" id="fq_a_'+i+'" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:11px;outline:none"><button class="faq-remove" onclick="this.parentElement.remove()">x</button>';
+  document.getElementById('faqList').appendChild(d);
+}
+
+async function saveInfo(){
+  const faqs=[];
+  document.querySelectorAll('.faq-item').forEach(el=>{
+    const q=el.querySelector('input:first-of-type')?.value;
+    const a=el.querySelector('input:last-of-type')?.value;
+    if(q&&a)faqs.push({q,a});
+  });
+  const twilio=document.getElementById('var_twilio').value.trim();
+  const config={twilio_number:twilio,system:document.getElementById('systemPrompt').value,vars:{business:document.getElementById('var_business').value,name:document.getElementById('var_business').value,phone:document.getElementById('var_phone').value,address:document.getElementById('var_address').value,hours:document.getElementById('var_hours').value,policy:document.getElementById('var_policy').value,twilio_number:twilio},faq:faqs};
+  try{
+    const res=await fetch('/admin/api/tenant/save',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:currentTenant,config})});
+    const d=await res.json();
+    if(d.ok)showToast('Saved successfully','success');
+    else showToast('Error saving','error');
+  }catch{showToast('Connection error','error');}
+}
+
+async function sendMessage(){
+  const input=document.getElementById('chatInput');
+  const text=input.value.trim();
+  if(!text||!currentTenant)return;
+  input.value='';
+  appendMsg(text,'user');
+  document.getElementById('typing').classList.add('show');
+  try{
+    const res=await fetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:currentTenant,sessionId,prompt:text})});
+    const d=await res.json();
+    document.getElementById('typing').classList.remove('show');
+    appendMsg(d.reply||'(no response)','bot');
+  }catch{document.getElementById('typing').classList.remove('show');appendMsg('Connection error.','bot');}
+}
+
+function appendMsg(text,role){
+  const msgs=document.getElementById('chatMessages');
+  const div=document.createElement('div');div.className='msg '+role;
+  div.innerHTML='<div class="msg-avatar">'+(role==='bot'?'V':'U')+'</div><div class="msg-bubble">'+text.replace(/\n/g,'<br>')+'</div>';
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+}
+
+async function loadAppointments(){
+  try{
+    const res=await fetch('/admin/api/appointments/'+currentTenant,{credentials:'include'});
+    const d=await res.json();appointments=d.appointments||[];
+  }catch{appointments=[];}
+}
+
+function renderCalendar(){
+  const d=T[lang];
+  document.getElementById('calMonth').textContent=d.months[calMonth]+' '+calYear;
+  const first=new Date(calYear,calMonth,1),last=new Date(calYear,calMonth+1,0),today=new Date();
+  const container=document.getElementById('calDays');container.innerHTML='';
+  for(let i=0;i<first.getDay();i++){const el=document.createElement('div');el.className='cal-day other';container.appendChild(el);}
+  for(let day=1;day<=last.getDate();day++){
+    const el=document.createElement('div');el.className='cal-day';
+    if(today.getDate()===day&&today.getMonth()===calMonth&&today.getFullYear()===calYear)el.classList.add('today');
+    el.innerHTML='<div class="day-n">'+day+'</div>';
+    appointments.filter(a=>{const s=new Date(a.start);return s.getDate()===day&&s.getMonth()===calMonth&&s.getFullYear()===calYear;}).forEach(a=>{
+      const chip=document.createElement('div');chip.className='appt-chip';
+      const t=new Date(a.start).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
+      chip.textContent=t+' '+(a.service||'Appt');chip.onclick=()=>openApptDetail(a);el.appendChild(chip);
+    });
+    container.appendChild(el);
+  }
+}
+
+function changeMonth(dir){calMonth+=dir;if(calMonth>11){calMonth=0;calYear++;}if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
+
+function openApptDetail(a){
+  const d=T[lang];const s=new Date(a.start),e=new Date(a.end||a.start);
+  document.getElementById('modal-title').textContent=a.service||'Appointment';
+  document.getElementById('modal-content').innerHTML=
+    '<div class="detail-row"><span class="detail-label">'+d.service+'</span><span>'+(a.customer_name||'—')+'</span></div>'+
+    '<div class="detail-row"><span class="detail-label">'+d.start+'</span><span>'+s.toLocaleString()+'</span></div>'+
+    '<div class="detail-row"><span class="detail-label">'+d.end+'</span><span>'+e.toLocaleString()+'</span></div>'+
+    '<div class="detail-row"><span class="detail-label">'+d.status+'</span><span class="badge '+(a.confirmed?'badge-green':'badge-yellow')+'">'+(a.confirmed?d.confirmed:d.pending)+'</span></div>'+
+    (a.notes?'<div class="detail-row"><span class="detail-label">'+d.notes+'</span><span>'+a.notes+'</span></div>':'');
+  document.getElementById('apptModal').classList.add('open');
+}
+
+function closeModal(){document.getElementById('apptModal').classList.remove('open');}
+
+function loadStats(){
+  const now=new Date();
+  const week=appointments.filter(a=>(now-new Date(a.start))<7*24*60*60*1000&&new Date(a.start)<=now).length;
+  const confirmed=appointments.filter(a=>a.confirmed).length;
+  const today=appointments.filter(a=>new Date(a.start).toDateString()===now.toDateString()).length;
+  document.getElementById('st_total').textContent=appointments.length;
+  document.getElementById('st_week').textContent=week;
+  document.getElementById('st_confirmed').textContent=confirmed;
+  document.getElementById('st_today').textContent=today;
+  const d=T[lang];
+  const counts=Array(12).fill(0);
+  appointments.forEach(a=>{counts[new Date(a.start).getMonth()]++;});
+  const max=Math.max(...counts,1);
+  document.getElementById('barChart').innerHTML=d.shortMonths.map((m,i)=>{
+    const h=Math.round((counts[i]/max)*110);
+    return '<div class="bar-group"><div class="bar-val">'+(counts[i]||'')+'</div><div class="bar" style="height:'+h+'px"></div><div class="bar-lbl">'+m+'</div></div>';
+  }).join('');
+  const days=d.dayNames;const dc=Array(7).fill(0);
+  appointments.forEach(a=>{dc[new Date(a.start).getDay()]++;});
+  const dm=Math.max(...dc,1);
+  const colors=['#64CEFB','#a78bfa','#34d399','#fbbf24','#f87171','#818cf8','#c084fc'];
+  document.getElementById('dayChart').innerHTML=days.map((day,i)=>{
+    const p=Math.round(dc[i]/dm*100);
+    return '<div style="display:flex;align-items:center;gap:7px;font-size:11px;padding:5px 0"><span style="width:26px;color:var(--muted)">'+day+'</span><div style="flex:1;height:4px;background:var(--border);border-radius:2px"><div style="width:'+p+'%;height:100%;background:'+colors[i]+';border-radius:2px"></div></div><span style="font-size:10px;color:var(--muted);width:14px;text-align:right">'+dc[i]+'</span></div>';
   }).join('');
 }
 
-function showPanel(name, btn) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+function openClientView(){window.open('/client?slug='+currentTenant,'_blank');}
+
+function showPanel(name,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
-  btn.classList.add('active');
-  const titles = {chat:'Chat AI',info:'AI Info',calendar:'Calendar',channels:'Channels',stats:'Statistics'};
-  document.getElementById('panelTitle').textContent = titles[name]||name;
-  if (name==='calendar') renderCalendar();
-  if (name==='stats') loadStats();
-  if (name==='info') loadTenantConfig();
+  if(btn)btn.classList.add('active');
+  document.getElementById('topbar-title').textContent=T[lang].topbar[name]||name;
+  if(name==='calendar')renderCalendar();
+  if(name==='stats')loadStats();
+  if(name==='info')loadTenantConfig();
 }
 
-function showToast(msg, type='success') {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast ' + type + ' show';
-  setTimeout(() => t.classList.remove('show'), 3000);
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+type+' show';
+  setTimeout(()=>t.classList.remove('show'),3000);
 }
 
-async function logout() {
-  await fetch('/auth/logout', {method:'POST', credentials:'include'});
-  window.location.href = '/login';
+async function logout(){
+  await fetch('/auth/logout',{method:'POST',credentials:'include'});
+  window.location.href='/login';
 }
 </script>
 </body>

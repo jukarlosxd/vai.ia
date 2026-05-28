@@ -282,6 +282,15 @@ app.get("/login", (req, res) => {
 app.use("/admin", verifyAdmin, express.static(ADMIN_DIR));
 app.get("/admin", verifyAdmin, (req, res) => {
   res.sendFile(path.join(ADMIN_DIR, "index.html"));
+
+app.get("/dashboard", verifyAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, "dashboard", "index.html"));
+});
+
+app.get("/admin/:slug", verifyAdmin, (req, res) => {
+  res.sendFile(path.join(ADMIN_DIR, "index.html"));
+});
+
 });
 
 // ===== CLIENT =====

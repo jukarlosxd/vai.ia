@@ -636,7 +636,7 @@ app.delete("/admin/api/tenant/:slug", verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: "Cannot delete this tenant" });
     }
     const tenantFile = path.join(TENANTS_DIR, slug + ".json");
-    await fs.promises.unlink(tenantFile);
+    await fs.unlink(tenantFile);
     tenantCache.delete(slug);
     if (typeof sessions !== "undefined") {
       for (const [key] of sessions) {

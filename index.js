@@ -628,6 +628,30 @@ app.post("/admin/api/tenant/save", verifyAdmin, async (req,res)=>{
   }
 });
 
+// DELETE /admin/api/tenant/:slug
+app.delete("/admin/api/tenant/:slug", verifyAdmin, async (req, res) => {
+  try {
+    const slug = String(req.params.slug).toLowerCase().trim();
+    if (!slug || slug === "demo") {
+      return res.status(400).json({ error: "Cannot delete this tenant" });
+    }
+    const tenantFile = path.join(TENANTS_DIR, slug + ".json");
+    await fs.promises.unlink(tenantFile);
+    tenantCache.delete(slug);
+    if (typeof sessions !== "undefined") {
+      for (const [key] of sessions) {
+        if (key.startsWith(slug + ":") || key === slug) sessions.delete(key);
+      }
+    }
+    console.log("[ADMIN] Tenant deleted: " + slug);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[ADMIN] delete tenant error:", e.message);
+    if (e.code === "ENOENT") return res.status(404).json({ error: "Tenant not found" });
+    res.status(500).json({ error: "Cannot delete tenant" });
+  }
+});
+
 // =========================
 // Citas por cliente (appointments)
 // =========================

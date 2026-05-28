@@ -89,6 +89,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .modal-field{margin-bottom:16px}
 .modal-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:7px;font-weight:500;letter-spacing:.2px}
 .modal-field input,.modal-field textarea{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color .2s}
+.pw-wrap{position:relative}.pw-wrap input{padding-right:42px}.pw-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;padding:0;display:flex;align-items:center;font-size:16px;transition:color .2s}.pw-eye:hover{color:var(--text)}
 .modal-field input:focus,.modal-field textarea:focus{border-color:rgba(100,206,251,.4)}
 .modal-field textarea{resize:vertical;min-height:90px;font-family:monospace;font-size:13px}
 .modal-field input::placeholder,.modal-field textarea::placeholder{color:rgba(255,255,255,.2)}
@@ -162,7 +163,23 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       </div>
       <div class="modal-field">
         <label>Password</label>
-        <input type="password" id="nc_password" placeholder="Min 8 characters">
+        <div class="pw-wrap">
+          <input type="password" id="nc_password" placeholder="Min 8 characters">
+          <button type="button" class="pw-eye" onclick="togglePw('nc_password','eye1')" id="eye1" tabindex="-1">
+            <svg id="eye1_open" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="eye1_closed" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label>Confirm Password</label>
+        <div class="pw-wrap">
+          <input type="password" id="nc_confirm" placeholder="Repeat password">
+          <button type="button" class="pw-eye" onclick="togglePw('nc_confirm','eye2')" id="eye2" tabindex="-1">
+            <svg id="eye2_open" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="eye2_closed" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
       </div>
     </div>
     <div class="modal-field">
@@ -251,6 +268,13 @@ async function deleteClient(slug) {
 }
 
 function openModal() { document.getElementById('addModal').classList.add('open'); }
+function togglePw(inputId, btnId) {
+  const inp = document.getElementById(inputId);
+  const isText = inp.type === 'text';
+  inp.type = isText ? 'password' : 'text';
+  document.getElementById(btnId + '_open').style.display = isText ? '' : 'none';
+  document.getElementById(btnId + '_closed').style.display = isText ? 'none' : '';
+}
 function closeModal() { document.getElementById('addModal').classList.remove('open'); }
 
 async function createClient() {
@@ -265,6 +289,8 @@ async function createClient() {
   if (!slug) { err.textContent = 'Slug is required'; err.style.display = 'block'; return; }
   if (!email) { err.textContent = 'Email is required'; err.style.display = 'block'; return; }
   if (!password || password.length < 8) { err.textContent = 'Password must be at least 8 characters'; err.style.display = 'block'; return; }
+  const confirm = document.getElementById('nc_confirm').value.trim();
+  if (password !== confirm) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; return; }
   btn.textContent = 'Creating...'; btn.disabled = true;
   const config = {
     system: system || 'You are the assistant of ' + (name||slug) + '. IMPORTANT: Always respond in the same language the client writes in. Be friendly and professional.',
@@ -281,7 +307,7 @@ async function createClient() {
     if (d.ok) {
       showToast('Client created!', 'success');
       closeModal();
-      ['nc_slug','nc_name','nc_email','nc_password','nc_system'].forEach(id => { document.getElementById(id).value = ''; });
+      ['nc_slug','nc_name','nc_email','nc_password','nc_confirm','nc_system'].forEach(id => { document.getElementById(id).value = ''; });
       await loadClients();
     } else { err.textContent = d.error || 'Error creating client'; err.style.display = 'block'; }
   } catch { err.textContent = 'Connection error'; err.style.display = 'block'; }

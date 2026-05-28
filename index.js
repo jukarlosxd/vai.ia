@@ -292,7 +292,6 @@ app.get("/admin/:slug", verifyAdmin, (req, res) => {
   res.sendFile(path.join(ADMIN_DIR, "index.html"));
 });
 
-});
 
 // ===== CLIENT =====
 // ===== CLIENT =====

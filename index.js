@@ -606,6 +606,12 @@ app.post("/admin/api/tenant/save", verifyAdmin, async (req,res)=>{
     await fs.writeFile(file, JSON.stringify(config,null,2), "utf8");
 
     tenantCache.delete(slug); // refrescar cache
+    // Clear active sessions so new prompt takes effect immediately
+    if (typeof sessions !== "undefined") {
+      for (const [key] of sessions) {
+        if (key.startsWith(slug + ":") || key === slug) sessions.delete(key);
+      }
+    }
     res.json({ ok:true });
   }catch(e){
     console.error("[ADMIN] save tenant error:", e);

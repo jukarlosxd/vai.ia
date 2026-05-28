@@ -1,4 +1,4 @@
-﻿// index.js â€” Express + Groq + Multi-tenant + Sessions + Booking FSM
+// index.js — Express + Groq + Multi-tenant + Sessions + Booking FSM
 import express from "express";
 import path from "path";
 import fs from "fs/promises";
@@ -74,7 +74,7 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ðŸ” Middleware de debug seguro
+// 🔍 Middleware de debug seguro
 app.use((req, res, next) => {
   console.log("REQ:", req.method, req.url);
   next();
@@ -97,13 +97,13 @@ app.get("/confirm", async (req, res) => {
     const pending = await loadPending(token);
     if (!pending) return res.status(404).send("Pending not found.");
 
-    // ExpiraciÃ³n
+    // Expiración
     if (Date.now() > pending.expiresAt) {
       await deletePending(token);
       return res.status(410).send("This confirmation link expired.");
     }
 
-    // âš ï¸ IMPORTANTE: si tu savePending NO guarda slug adentro, aquÃ­ se rompe.
+    // ⚠️ IMPORTANTE: si tu savePending NO guarda slug adentro, aquí se rompe.
 const slug = (req.query.slug || pending.slug || pending.client || "demo").toString().toLowerCase().trim();
 
     const list = await loadAppointments(slug);
@@ -116,7 +116,7 @@ const slug = (req.query.slug || pending.slug || pending.client || "demo").toStri
       return res.status(409).send("That time is no longer available.");
     }
 
-    // âœ… crear la cita REAL
+    // ✅ crear la cita REAL
     const appt = {
       id: pending.id,
       title: pending.service || "Appointment",
@@ -134,15 +134,15 @@ const slug = (req.query.slug || pending.slug || pending.client || "demo").toStri
       updated_at: new Date().toISOString(),
     };
 
-    // âœ… evitar duplicados si confirman 2 veces
+    // ✅ evitar duplicados si confirman 2 veces
     const exists = list.some(a => a.id === appt.id);
     if (!exists) list.push(appt);
 
-    // âœ… guardar cita + borrar pending
+    // ✅ guardar cita + borrar pending
     await saveAppointments(slug, list);
     await deletePending(token);
 
-    // âœ… email final + recordatorios
+    // ✅ email final + recordatorios
     try {
       if (appt.email) {
         const cfg = await loadTenant(slug);
@@ -156,7 +156,7 @@ const slug = (req.query.slug || pending.slug || pending.client || "demo").toStri
 
         const timeLocal = DateTime.fromISO(appt.start, { zone: "utc" })
           .setZone(tz)
-          .toFormat("MMM dd, yyyy â€¢ hh:mm a");
+          .toFormat("MMM dd, yyyy • hh:mm a");
 
         const baseUrl =
           process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3100}`;
@@ -190,7 +190,7 @@ const slug = (req.query.slug || pending.slug || pending.client || "demo").toStri
             service: appt.service || "Service",
             timeLocal,
             timezone: tz,
-            whenLabel: lang === "es" ? "maÃ±ana" : "tomorrow",
+            whenLabel: lang === "es" ? "mañana" : "tomorrow",
           });
 await scheduleReminder({ to: appt.email, subject: rem1.subject, text: rem1.text, html: rem1.html, fireAt: r1 });
         }
@@ -211,7 +211,7 @@ await scheduleReminder({ to: appt.email, subject: rem2.subject, text: rem2.text,
       console.error("[CONFIRM] post-confirm email/reminders error:", e.message);
     }
 
-    return res.send("âœ… Appointment confirmed. You can close this tab.");
+    return res.send("✅ Appointment confirmed. You can close this tab.");
   } catch (e) {
     console.error("[CONFIRM] error:", e.message);
     return res.status(500).send("Server error.");
@@ -262,7 +262,7 @@ app.get("/cancel", async (req, res) => {
     list.splice(idx, 1);
     await saveAppointments(safeSlug, list);
 
-    return res.send("âœ… Appointment canceled. You can close this tab.");
+    return res.send("✅ Appointment canceled. You can close this tab.");
   } catch (e) {
     console.error("[CANCEL] error:", e.message);
     return res.status(500).send("Server error.");
@@ -302,7 +302,7 @@ app.get("/client/login", (req, res) => {
   res.sendFile(path.join(CLIENT_DIR, "login.html"));
 });
 
-// STATIC + PROTECCIÃ“N (deja pasar login y el post de login)
+// STATIC + PROTECCIÓN (deja pasar login y el post de login)
 app.use(
   "/client",
   (req, res, next) => {
@@ -403,7 +403,7 @@ app.post("/auth/login", async (req, res) => {
     return res.status(400).json({ ok: false, error: "Missing fields" });
   }
 
-  // âœ… Solo admins aquÃ­ (owner/partner)
+  // ✅ Solo admins aquí (owner/partner)
   const user = await findAdminByEmail(email);
   if (!user) return res.status(401).json({ ok: false, error: "Invalid credentials" });
 
@@ -541,7 +541,7 @@ function requireAdmin(req, res, next) {
 
 app.use((req, res, next) => {
   if (req.path.startsWith("/admin/api/")) {
-    console.log("ðŸ§ª API HIT:", req.method, req.path);
+    console.log("🧪 API HIT:", req.method, req.path);
   }
   next();
 });
@@ -578,7 +578,7 @@ app.post("/admin/api/logout", (req, res) => {
 });
 
 // =========================
-// ADMIN API â€“ Tenants (protegido con verifyAdmin)
+// ADMIN API – Tenants (protegido con verifyAdmin)
 // =========================
 
 app.get("/admin/api/tenants", verifyAdmin, async (req,res)=>{
@@ -633,7 +633,7 @@ app.post("/admin/api/tenant/save", verifyAdmin, async (req,res)=>{
 // Citas por cliente (appointments)
 // =========================
 
-// VersiÃ³n antigua basada en ```APPOINTMENT``` (la mantenemos por compatibilidad)
+// Versión antigua basada en ```APPOINTMENT``` (la mantenemos por compatibilidad)
 async function handleLLMCalendarActions(slug, llmText) {
   if (!llmText) return;
 
@@ -840,14 +840,14 @@ function detectLang(text = "") {
   const t = (text || "").toLowerCase().trim();
 
   const es = [
-    "Â¿",
-    "Â¡",
-    "Ã±",
-    "Ã¡",
-    "Ã©",
-    "Ã­",
-    "Ã³",
-    "Ãº",
+    "¿",
+    "¡",
+    "ñ",
+    "á",
+    "é",
+    "í",
+    "ó",
+    "ú",
     "hola",
     "gracias",
     "por favor",
@@ -855,20 +855,20 @@ function detectLang(text = "") {
     "cita",
     "agendar",
     "reservar",
-    "despuÃ©s",
+    "después",
     "despues",
-    "barberÃ­a",
+    "barbería",
     "barberia",
     "corte",
     "precio",
     "horario",
     "lunes",
     "martes",
-    "miÃ©rcoles",
+    "miércoles",
     "miercoles",
     "jueves",
     "viernes",
-    "sÃ¡bado",
+    "sábado",
     "sabado",
     "domingo",
   ];
@@ -953,30 +953,30 @@ function parseHeuristicBooking(prompt, tz) {
   const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   const email = emailMatch ? emailMatch[0] : "";
 
-  // phone (usa 10 dÃ­gitos)
+  // phone (usa 10 dígitos)
   const digits = (text.match(/\d/g) || []).join("");
   const phone = digits.length >= 10 ? digits.slice(-10) : "";
 
   // name (muy simple: "mi nombre es X" / "my name is X")
   let name = "";
-  let m = text.match(/mi nombre es\s+([a-zÃ¡Ã©Ã­Ã³ÃºÃ± ]{2,40})/i);
+  let m = text.match(/mi nombre es\s+([a-záéíóúñ ]{2,40})/i);
   if (m) name = m[1].trim();
   if (!name) {
     m = text.match(/my name is\s+([a-z ]{2,40})/i);
     if (m) name = m[1].trim();
   }
 
-  // service (keywords bÃ¡sicos)
+  // service (keywords básicos)
   const lower = text.toLowerCase();
   let service = "";
   if (lower.includes("haircut") || lower.includes("corte")) service = "Haircut";
   if (lower.includes("beard") || lower.includes("barba")) service = service || "Beard";
   if (lower.includes("shave") || lower.includes("afeitado")) service = service || "Shave";
 
-  // date: tomorrow/maÃ±ana/today/hoy
+  // date: tomorrow/mañana/today/hoy
   const now = DateTime.now().setZone(tz);
   let day = now;
-  if (lower.includes("tomorrow") || lower.includes("maÃ±ana") || lower.includes("manana")) day = now.plus({ days: 1 });
+  if (lower.includes("tomorrow") || lower.includes("mañana") || lower.includes("manana")) day = now.plus({ days: 1 });
   if (lower.includes("today") || lower.includes("hoy")) day = now;
 
   // time like "4pm", "4 pm", "16:30", "4:30pm"
@@ -993,7 +993,7 @@ function parseHeuristicBooking(prompt, tz) {
   const startDT = day.set({ hour: hh, minute: mm, second: 0, millisecond: 0 });
   if (!startDT.isValid) return null;
 
-  // requeridos mÃ­nimos
+  // requeridos mínimos
   if (!email || !phone || !service) return null;
 
   return {
@@ -1071,11 +1071,11 @@ function renderConfirmationEmail(
 ) {
   const isES = lang === "es";
 
-  const subject = isES ? "ConfirmaciÃ³n de cita" : "Appointment confirmation";
+  const subject = isES ? "Confirmación de cita" : "Appointment confirmation";
 
   const text = isES
     ? `Hola ${name}!\n\nTu cita fue reservada.\nServicio: ${service}\nHora: ${time}\nPago: ${payment}\n\n${business}${
-        address ? `\nDirecciÃ³n: ${address}` : ""
+        address ? `\nDirección: ${address}` : ""
       }${phone ? `\nTel: ${phone}` : ""}${
         cancelUrl ? `\n\nCancelar cita: ${cancelUrl}` : ""
       }\n\nSi necesitas reprogramar, responde este email.`
@@ -1089,7 +1089,7 @@ function renderConfirmationEmail(
   <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;max-width:560px;margin:auto;background:#ffffff;border:1px solid #eee;border-radius:12px;overflow:hidden">
     <div style="background:#111827;color:#fff;padding:18px 22px">
       <h2 style="margin:0;font-size:18px;letter-spacing:.2px">${business}</h2>
-      <p style="margin:6px 0 0;opacity:.9">${isES ? "ConfirmaciÃ³n de cita" : "Appointment Confirmation"}</p>
+      <p style="margin:6px 0 0;opacity:.9">${isES ? "Confirmación de cita" : "Appointment Confirmation"}</p>
     </div>
 
     <div style="padding:20px 22px;color:#111">
@@ -1104,7 +1104,7 @@ function renderConfirmationEmail(
             ${isES ? "Cancelar cita" : "Cancel appointment"}
           </a>
           <p style="margin:10px 0 0;color:#6b7280;font-size:12px">
-            ${isES ? "Si cancelas, se elimina la cita automÃ¡ticamente." : "If you cancel, the appointment is removed automatically."}
+            ${isES ? "Si cancelas, se elimina la cita automáticamente." : "If you cancel, the appointment is removed automatically."}
           </p>
         </div>
       `
@@ -1130,8 +1130,8 @@ function renderConfirmationEmail(
         address || phone
           ? `
         <div style="background:#f9fafb;border:1px solid #eee;border-radius:10px;padding:12px 14px;margin:12px 0">
-          ${address ? `<div style="margin-bottom:6px"><strong>${isES ? "DirecciÃ³n" : "Address"}:</strong> ${address}</div>` : ``}
-          ${phone ? `<div><strong>${isES ? "TelÃ©fono" : "Phone"}:</strong> ${phone}</div>` : ``}
+          ${address ? `<div style="margin-bottom:6px"><strong>${isES ? "Dirección" : "Address"}:</strong> ${address}</div>` : ``}
+          ${phone ? `<div><strong>${isES ? "Teléfono" : "Phone"}:</strong> ${phone}</div>` : ``}
         </div>
       `
           : ``
@@ -1143,7 +1143,7 @@ function renderConfirmationEmail(
     </div>
 
     <div style="padding:16px 22px;background:#f9fafb;color:#6b7280;font-size:12px;text-align:center">
-      Â© ${new Date().getFullYear()} ${business}
+      © ${new Date().getFullYear()} ${business}
     </div>
   </div>`;
 
@@ -1179,7 +1179,7 @@ function renderReminderEmail(
       <p style="margin:0"><strong>${timeLocal}</strong> (${timezone})</p>
     </div>
     <div style="padding:16px 22px;background:#f9fafb;color:#6b7280;font-size:12px;text-align:center">
-      Â© ${new Date().getFullYear()} ${business}
+      © ${new Date().getFullYear()} ${business}
     </div>
   </div>`;
   return { subject, text, html };
@@ -1218,7 +1218,7 @@ app.post("/sms", async (req, res) => {
     // tenant por query (?slug=demo). Si no hay, usa demo.
     const slug = (req.query.slug || "demo").toString().toLowerCase().trim();
 
-    // sessionId estable por nÃºmero (para que recuerde el flujo)
+    // sessionId estable por número (para que recuerde el flujo)
     const sessionId = `sms_${slug}_${from}`;
 
     const out = await runChat({ prompt: body, slug, sessionId });
@@ -1285,11 +1285,11 @@ app.use((req, res, next) => {
 function normPhone(x="") { return String(x).replace(/\D/g,""); }
 function hasCancelIntent(t="") {
   const s = t.toLowerCase();
-  return s.includes("cancel") || s.includes("cancelar") || s.includes("cancela") || s.includes("cancelaciÃ³n") || s.includes("cancelacion");
+  return s.includes("cancel") || s.includes("cancelar") || s.includes("cancela") || s.includes("cancelación") || s.includes("cancelacion");
 }
 function isYes(t="") {
   const s = t.toLowerCase().trim();
-  return ["si","sÃ­","yes","y","ok","okay","confirmo","confirmar"].includes(s);
+  return ["si","sí","yes","y","ok","okay","confirmo","confirmar"].includes(s);
 }
 function isNo(t="") {
   const s = t.toLowerCase().trim();
@@ -1312,7 +1312,7 @@ function parseDateTimeBasic(text, tz = "America/Denver") {
   // acepta: 17/5pm, 17/5:30pm, 17/17:00, 18/4pm, etc.
   const dayTime = s.match(/\b(\d{1,2})\s*\/\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/);
   if (dayTime) {
-    const d1 = parseInt(dayTime[1], 10);      // dÃ­a
+    const d1 = parseInt(dayTime[1], 10);      // día
     let hh = parseInt(dayTime[2], 10);        // hora
     const mm = dayTime[3] ? parseInt(dayTime[3], 10) : 0;
     const ap = (dayTime[4] || "").toLowerCase();
@@ -1321,19 +1321,19 @@ function parseDateTimeBasic(text, tz = "America/Denver") {
     if (ap === "pm" && hh !== 12) hh += 12;
     if (ap === "am" && hh === 12) hh = 0;
 
-    // usar mes/aÃ±o actual (si ya pasÃ³, usar el prÃ³ximo mes si posible, si no prÃ³ximo aÃ±o)
+    // usar mes/año actual (si ya pasó, usar el próximo mes si posible, si no próximo año)
     let base = now.set({ day: d1, hour: hh, minute: mm, second: 0, millisecond: 0 });
 
-    // si day invÃ¡lido (ej: 31 en mes con 30), luxon lo marca invÃ¡lido
+    // si day inválido (ej: 31 en mes con 30), luxon lo marca inválido
     if (base.isValid) {
-      // si ya pasÃ³ (mÃ¡s de 1 dÃ­a atrÃ¡s), muÃ©velo hacia el futuro lo mÃ¡s cercano
+      // si ya pasó (más de 1 día atrás), muévelo hacia el futuro lo más cercano
       if (base < now.minus({ days: 1 })) {
         const nextMonth = base.plus({ months: 1 });
         base = nextMonth.isValid ? nextMonth : base.plus({ years: 1 });
       }
       return base;
     }
-    // si es invÃ¡lido, seguimos con el parser normal
+    // si es inválido, seguimos con el parser normal
   }
 
   // ---------- time ----------
@@ -1363,11 +1363,11 @@ function parseDateTimeBasic(text, tz = "America/Denver") {
   // 2) "jueves 18" / "thursday 18" (sin mes)
   if (!date) {
     const hasWeekday =
-      /(lunes|martes|miercoles|miÃ©rcoles|jueves|viernes|sabado|sÃ¡bado|domingo)\b/.test(s) ||
+      /(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b/.test(s) ||
       /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(s);
 
     if (hasWeekday) {
-      // buscar un nÃºmero de dÃ­a (1-31)
+      // buscar un número de día (1-31)
       const dm = s.match(/\b(3[01]|[12]\d|[1-9])\b/);
       if (dm) {
         const dd = parseInt(dm[1], 10);
@@ -1380,7 +1380,7 @@ function parseDateTimeBasic(text, tz = "America/Denver") {
     }
   }
 
-  // 3) MM/DD o MM-DD (solo si el primer nÃºmero <= 12 para evitar confusiÃ³n con "17/...")
+  // 3) MM/DD o MM-DD (solo si el primer número <= 12 para evitar confusión con "17/...")
   if (!date) {
     const md = s.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
     if (md) {
@@ -1430,9 +1430,9 @@ function parseDateTimeBasic(text, tz = "America/Denver") {
     }
   }
 
-  // 5) hoy/maÃ±ana
+  // 5) hoy/mañana
   if (!date) {
-    if (s.includes("maÃ±ana") || s.includes("tomorrow")) date = now.plus({ days: 1 });
+    if (s.includes("mañana") || s.includes("tomorrow")) date = now.plus({ days: 1 });
     else if (s.includes("hoy") || s.includes("today")) date = now;
   }
 
@@ -1470,7 +1470,7 @@ function isPriceQuestion(t="") {
     const cfg = await loadTenant(safeSlug);
 
     const systemPrompt =
-      cfg.system || "Eres un asistente para este negocio. Responde corto, claro y Ãºtil.";
+      cfg.system || "Eres un asistente para este negocio. Responde corto, claro y útil.";
 
     const vars = cfg.vars || {};
     const varsText = Object.entries(vars)
@@ -1486,7 +1486,7 @@ function isPriceQuestion(t="") {
     sess.cancelFlow =
       sess.cancelFlow || { step: "IDLE", email: "", phone: "", startISO: "", matchId: "" };
 
-    // 1) Si el usuario inicia cancelaciÃ³n
+    // 1) Si el usuario inicia cancelación
     if (sess.cancelFlow.step === "IDLE" && hasCancelIntent(prompt)) {
       if (!sess.lang) {
         const d = detectLang(prompt);
@@ -1498,8 +1498,8 @@ function isPriceQuestion(t="") {
 
       return {
         reply: isES
-          ? "Claro âœ… Para cancelar, dime el **email o telÃ©fono** y el **dÃ­a/hora** de la cita. Ej: `maÃ±ana a las 4pm`."
-          : "Sure âœ… To cancel, tell me your **email or phone** and the **date/time**. Example: `tomorrow at 4pm`.",
+          ? "Claro ✅ Para cancelar, dime el **email o teléfono** y el **día/hora** de la cita. Ej: `mañana a las 4pm`."
+          : "Sure ✅ To cancel, tell me your **email or phone** and the **date/time**. Example: `tomorrow at 4pm`.",
         appointmentCreated: false,
         appointmentError: null,
       };
@@ -1520,8 +1520,8 @@ function isPriceQuestion(t="") {
       if (!sess.cancelFlow.startISO || (!sess.cancelFlow.email && !sess.cancelFlow.phone)) {
         return {
           reply: isES
-            ? "Me falta un dato ðŸ‘‡ Dime **email o telÃ©fono** y tambiÃ©n **dÃ­a/hora** (ej: `maÃ±ana a las 4pm`)."
-            : "Iâ€™m missing one detail ðŸ‘‡ Tell me **email or phone** and also the **date/time** (ex: `tomorrow at 4pm`).",
+            ? "Me falta un dato 👇 Dime **email o teléfono** y también **día/hora** (ej: `mañana a las 4pm`)."
+            : "I’m missing one detail 👇 Tell me **email or phone** and also the **date/time** (ex: `tomorrow at 4pm`).",
           appointmentCreated: false,
           appointmentError: null,
         };
@@ -1554,8 +1554,8 @@ function isPriceQuestion(t="") {
         sess.cancelFlow = { step: "IDLE", email: "", phone: "", startISO: "", matchId: "" };
         return {
           reply: isES
-            ? "No encontrÃ© una cita con esos datos ðŸ˜• Verifica email/telÃ©fono y la hora exacta."
-            : "I couldnâ€™t find an appointment with those details ðŸ˜• Please verify email/phone and the exact time.",
+            ? "No encontré una cita con esos datos 😕 Verifica email/teléfono y la hora exacta."
+            : "I couldn’t find an appointment with those details 😕 Please verify email/phone and the exact time.",
           appointmentCreated: false,
           appointmentError: "NOT_FOUND",
         };
@@ -1566,18 +1566,18 @@ function isPriceQuestion(t="") {
 
       const when = DateTime.fromISO(match.start || match.startsAt, { zone: "utc" })
         .setZone(tz)
-        .toFormat("MMM dd, yyyy â€¢ hh:mm a");
+        .toFormat("MMM dd, yyyy • hh:mm a");
 
       return {
         reply: isES
-          ? `EncontrÃ© tu cita âœ… (${when}). Â¿Quieres **cancelar** o **reagendar**?`
-          : `I found your appointment âœ… (${when}). Do you want to **cancel** or **reschedule**?`,
+          ? `Encontré tu cita ✅ (${when}). ¿Quieres **cancelar** o **reagendar**?`
+          : `I found your appointment ✅ (${when}). Do you want to **cancel** or **reschedule**?`,
         appointmentCreated: false,
         appointmentError: null,
       };
     }
 
-    // 2.5) Elegir acciÃ³n: cancelar vs reagendar
+    // 2.5) Elegir acción: cancelar vs reagendar
     if (sess.cancelFlow.step === "AWAIT_ACTION") {
       const isES = (sess.lang || detectLang(prompt) || "es") === "es";
       const q = (prompt || "").toLowerCase();
@@ -1590,7 +1590,7 @@ function isPriceQuestion(t="") {
         sess.cancelFlow.step = "AWAIT_CONFIRM";
         return {
           reply: isES
-            ? "Â¿Confirmas que deseas **cancelarla**? (sÃ­/no)"
+            ? "¿Confirmas que deseas **cancelarla**? (sí/no)"
             : "Do you confirm you want to **cancel** it? (yes/no)",
           appointmentCreated: false,
           appointmentError: null,
@@ -1603,7 +1603,7 @@ function isPriceQuestion(t="") {
         if (!current) {
           sess.cancelFlow = { step: "IDLE", email: "", phone: "", startISO: "", matchId: "" };
           return {
-            reply: isES ? "No encontrÃ© esa cita ðŸ˜•" : "I couldn't find that appointment ðŸ˜•",
+            reply: isES ? "No encontré esa cita 😕" : "I couldn't find that appointment 😕",
             appointmentCreated: false,
             appointmentError: "NOT_FOUND",
           };
@@ -1627,14 +1627,14 @@ function isPriceQuestion(t="") {
         const lines = suggestions
           .map((s) => {
             const t = DateTime.fromISO(s.start, { zone: "utc" }).setZone(tz).toFormat("hh:mm a");
-            return `â€¢ ${t}`;
+            return `• ${t}`;
           })
           .join("\n");
 
         return {
           reply: isES
-            ? `Listo âœ… Â¿A cuÃ¡l hora quieres moverla?\n${lines}\n\n(Responde con una hora, o toca un botÃ³n.)`
-            : `Ok âœ… What time do you want instead?\n${lines}\n\n(Reply with a time, or tap a button.)`,
+            ? `Listo ✅ ¿A cuál hora quieres moverla?\n${lines}\n\n(Responde con una hora, o toca un botón.)`
+            : `Ok ✅ What time do you want instead?\n${lines}\n\n(Reply with a time, or tap a button.)`,
           appointmentCreated: false,
           appointmentError: "SUGGESTIONS",
           suggestions,
@@ -1660,7 +1660,7 @@ function isPriceQuestion(t="") {
         if (!dt) {
           return {
             reply: isES
-              ? "Dime la nueva hora (ej: `5:30pm`) o toca un botÃ³n."
+              ? "Dime la nueva hora (ej: `5:30pm`) o toca un botón."
               : "Tell me the new time (ex: `5:30pm`) or tap a button.",
             appointmentCreated: false,
             appointmentError: null,
@@ -1674,7 +1674,7 @@ function isPriceQuestion(t="") {
       if (!current) {
         sess.cancelFlow = { step: "IDLE", email: "", phone: "", startISO: "", matchId: "" };
         return {
-          reply: isES ? "No encontrÃ© esa cita ðŸ˜•" : "I couldn't find that appointment ðŸ˜•",
+          reply: isES ? "No encontré esa cita 😕" : "I couldn't find that appointment 😕",
           appointmentCreated: false,
           appointmentError: "NOT_FOUND",
         };
@@ -1692,7 +1692,7 @@ function isPriceQuestion(t="") {
 
       if (!ok) {
         return {
-          reply: isES ? "Esa hora tambiÃ©n estÃ¡ ocupada ðŸ˜• Elige otra." : "That time is also taken ðŸ˜• Pick another one.",
+          reply: isES ? "Esa hora también está ocupada 😕 Elige otra." : "That time is also taken 😕 Pick another one.",
           appointmentCreated: false,
           appointmentError: "CONFLICT",
         };
@@ -1702,7 +1702,7 @@ function isPriceQuestion(t="") {
 current.end = newEnd.toISO();
 current.updated_at = DateTime.utc().toISO();
 
-// âœ… asegurar token para link de cancelaciÃ³n
+// ✅ asegurar token para link de cancelación
 current.cancel_token = current.cancel_token || crypto.randomBytes(16).toString("hex");
 
 await saveAppointments(safeSlug, list);
@@ -1721,7 +1721,7 @@ await saveAppointments(safeSlug, list);
 
         const timeLocal = DateTime.fromISO(current.start, { zone: "utc" })
           .setZone(tz)
-          .toFormat("MMM dd, yyyy â€¢ hh:mm a");
+          .toFormat("MMM dd, yyyy • hh:mm a");
 
         if (current.email) {
           const conf = renderConfirmationEmail(sess.lang || "es", {
@@ -1744,20 +1744,20 @@ await saveAppointments(safeSlug, list);
       sess.cancelFlow = { step: "IDLE", email: "", phone: "", startISO: "", matchId: "" };
 
       return {
-        reply: isES ? "âœ… Listo. Tu cita fue reagendada." : "âœ… Done. Your appointment was rescheduled.",
+        reply: isES ? "✅ Listo. Tu cita fue reagendada." : "✅ Done. Your appointment was rescheduled.",
         appointmentCreated: false,
         appointmentError: null,
       };
     }
 
-    // 3) ConfirmaciÃ³n final de cancelaciÃ³n
+    // 3) Confirmación final de cancelación
     if (sess.cancelFlow.step === "AWAIT_CONFIRM") {
       const isES = (sess.lang || "es") === "es";
 
       if (isNo(prompt)) {
         sess.cancelFlow = { step: "IDLE", email: "", phone: "", startISO: "", matchId: "" };
         return {
-          reply: isES ? "Perfecto âœ… No cancelÃ© la cita." : "Perfect âœ… I did not cancel the appointment.",
+          reply: isES ? "Perfecto ✅ No cancelé la cita." : "Perfect ✅ I did not cancel the appointment.",
           appointmentCreated: false,
           appointmentError: null,
         };
@@ -1772,14 +1772,14 @@ await saveAppointments(safeSlug, list);
         sess.cancelFlow = { step: "IDLE", email: "", phone: "", startISO: "", matchId: "" };
 
         return {
-          reply: isES ? "âœ… Listo. Tu cita fue cancelada." : "âœ… Done. Your appointment has been canceled.",
+          reply: isES ? "✅ Listo. Tu cita fue cancelada." : "✅ Done. Your appointment has been canceled.",
           appointmentCreated: false,
           appointmentError: null,
         };
       }
 
       return {
-        reply: isES ? "Responde con **sÃ­** o **no** para confirmar la cancelaciÃ³n."
+        reply: isES ? "Responde con **sí** o **no** para confirmar la cancelación."
                     : "Reply **yes** or **no** to confirm the cancellation.",
         appointmentCreated: false,
         appointmentError: null,
@@ -1793,7 +1793,7 @@ await saveAppointments(safeSlug, list);
 
     const bookingRules = `
 IMPORTANT BOOKING RULES:
-- You MUST understand natural dates like: "tomorrow", "today", "this Friday", "next Friday", "Sunday", "maÃ±ana", "hoy", "este viernes", "el domingo".
+- You MUST understand natural dates like: "tomorrow", "today", "this Friday", "next Friday", "Sunday", "mañana", "hoy", "este viernes", "el domingo".
 - Today is: ${todayISO}
 - Current local time is: ${nowLabel}
 - Timezone is: ${tz}
@@ -1827,7 +1827,7 @@ IMPORTANT:
       { role: "user", content: prompt },
     ];
 
-    // âœ… Si viene un botÃ³n SLOT, reservar con el draft anterior
+    // ✅ Si viene un botón SLOT, reservar con el draft anterior
     {
       const m = (prompt || "").match(/^SLOT\s+(.+)$/i);
       if (m && sess.lastDraft) {
@@ -1839,7 +1839,7 @@ IMPORTANT:
         if (!isSlotFree(list, start, end)) {
           const isES = (sess.lang || "es") === "es";
           return {
-            reply: isES ? "Esa hora ya se ocupÃ³ ðŸ˜• Elige otra." : "That time was taken ðŸ˜• Pick another one.",
+            reply: isES ? "Esa hora ya se ocupó 😕 Elige otra." : "That time was taken 😕 Pick another one.",
             appointmentCreated: false,
             appointmentError: "CONFLICT",
           };
@@ -1873,7 +1873,7 @@ IMPORTANT:
 
         const timeStr = DateTime.fromISO(pending.start, { zone: "utc" })
           .setZone(tz)
-          .toFormat("MMM dd, yyyy â€¢ hh:mm a");
+          .toFormat("MMM dd, yyyy • hh:mm a");
 
         const isES = pending.lang === "es";
         const subject = isES ? "Confirma tu cita" : "Confirm your appointment";
@@ -1886,7 +1886,7 @@ IMPORTANT:
           <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;max-width:560px;margin:auto;background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden">
             <div style="background:#111827;color:#fff;padding:18px 22px">
               <h2 style="margin:0;font-size:18px">${businessName}</h2>
-              <p style="margin:6px 0 0;opacity:.9">${isES ? "ConfirmaciÃ³n requerida" : "Confirmation required"}</p>
+              <p style="margin:6px 0 0;opacity:.9">${isES ? "Confirmación requerida" : "Confirmation required"}</p>
             </div>
             <div style="padding:20px 22px;color:#111">
               <p style="margin:0 0 10px">${isES ? "Hola" : "Hi"} <strong>${pending.customer_name || ""}</strong>,</p>
@@ -1909,15 +1909,15 @@ IMPORTANT:
 
         return {
           reply: isES
-            ? "Perfecto âœ… Te enviÃ© el correo para confirmar. Revisa tu inbox y toca **Confirmar cita**."
-            : "Perfect âœ… I sent the confirmation email. Check your inbox and tap **Confirm appointment**.",
+            ? "Perfecto ✅ Te envié el correo para confirmar. Revisa tu inbox y toca **Confirmar cita**."
+            : "Perfect ✅ I sent the confirmation email. Check your inbox and tap **Confirm appointment**.",
           appointmentCreated: false,
           appointmentError: "PENDING_CONFIRMATION",
         };
       }
     }
 
-    // âœ… AUTO-BOOKING (sin LLM) si ya tenemos todo
+    // ✅ AUTO-BOOKING (sin LLM) si ya tenemos todo
     const hb = parseHeuristicBooking(prompt, tz);
     if (hb) {
       const list = await loadAppointments(safeSlug);
@@ -1944,8 +1944,8 @@ IMPORTANT:
 
         return {
           reply: isES
-            ? "Lo siento ðŸ˜• esa hora ya no estÃ¡ disponible. Te dejo opciones cercanas:"
-            : "Sorry ðŸ˜• that time is no longer available. Here are nearby options:",
+            ? "Lo siento 😕 esa hora ya no está disponible. Te dejo opciones cercanas:"
+            : "Sorry 😕 that time is no longer available. Here are nearby options:",
           appointmentCreated: false,
           appointmentError: "CONFLICT",
           suggestions,
@@ -1980,7 +1980,7 @@ IMPORTANT:
 
       const timeStr = DateTime.fromISO(pending.start, { zone: "utc" })
         .setZone(tz)
-        .toFormat("MMM dd, yyyy â€¢ hh:mm a");
+        .toFormat("MMM dd, yyyy • hh:mm a");
 
       const isES = pending.lang === "es";
       const subject = isES ? "Confirma tu cita" : "Confirm your appointment";
@@ -1993,7 +1993,7 @@ IMPORTANT:
         <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;max-width:560px;margin:auto;background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden">
           <div style="background:#111827;color:#fff;padding:18px 22px">
             <h2 style="margin:0;font-size:18px">${businessName}</h2>
-            <p style="margin:6px 0 0;opacity:.9">${isES ? "ConfirmaciÃ³n requerida" : "Confirmation required"}</p>
+            <p style="margin:6px 0 0;opacity:.9">${isES ? "Confirmación requerida" : "Confirmation required"}</p>
           </div>
           <div style="padding:20px 22px;color:#111">
             <p style="margin:0 0 10px">${isES ? "Hola" : "Hi"} <strong>${pending.customer_name || ""}</strong>,</p>
@@ -2019,8 +2019,8 @@ IMPORTANT:
 
       return {
         reply: isES
-          ? "Perfecto. Te enviÃ© un correo para confirmar la cita. âœ… Revisa tu inbox y dale click a **Confirmar cita**."
-          : "Perfect. I sent you an email to confirm the appointment. âœ… Check your inbox and click **Confirm appointment**.",
+          ? "Perfecto. Te envié un correo para confirmar la cita. ✅ Revisa tu inbox y dale click a **Confirmar cita**."
+          : "Perfect. I sent you an email to confirm the appointment. ✅ Check your inbox and click **Confirm appointment**.",
         appointmentCreated: false,
         appointmentError: "PENDING_CONFIRMATION",
       };
@@ -2035,20 +2035,20 @@ if (isGreeting) {
   sess.lang = isES ? "es" : "en";
   return {
     reply: isES
-      ? "Â¡Hola! ðŸ‘‹ Â¿Quieres agendar una cita? Dime: servicio, dÃ­a y hora."
-      : "Hi! ðŸ‘‹ Do you want to book an appointment? Tell me: service, day, and time.",
+      ? "¡Hola! 👋 ¿Quieres agendar una cita? Dime: servicio, día y hora."
+      : "Hi! 👋 Do you want to book an appointment? Tell me: service, day, and time.",
     appointmentCreated: false,
     appointmentError: null,
   };
 }
 
-/* âœ… PRICES (deterministic, no LLM) */
+/* ✅ PRICES (deterministic, no LLM) */
 {
   const isES = (sess.lang || detectLang(prompt) || "es") === "es";
   const q = quick;
 
   const asksPrices =
-    q.includes("precio") || q.includes("precios") || q.includes("cuanto cuesta") || q.includes("cuÃ¡nto cuesta") ||
+    q.includes("precio") || q.includes("precios") || q.includes("cuanto cuesta") || q.includes("cuánto cuesta") ||
     q.includes("price") || q.includes("prices") || q.includes("cost") || q.includes("how much");
 
   if (asksPrices) {
@@ -2060,12 +2060,12 @@ if (isGreeting) {
     const haircut = cfg?.vars?.prices?.haircut ?? 18;
     const beard   = cfg?.vars?.prices?.beard   ?? 25;
 
-    // respuesta corta y que empuje a acciÃ³n (sin pelear con el usuario)
+    // respuesta corta y que empuje a acción (sin pelear con el usuario)
     if (sess.priceAskCount >= 3) {
       return {
         reply: isES
-          ? `Te los dejo aquÃ­ otra vez y cerramos el tema âœ…\nâ€¢ Corte: $${haircut}\nâ€¢ Barba: $${beard}\n\nÂ¿Quieres agendar? Dime dÃ­a y hora.`
-          : `Here they are again âœ…\nâ€¢ Haircut: $${haircut}\nâ€¢ Beard: $${beard}\n\nDo you want to book? Tell me day and time.`,
+          ? `Te los dejo aquí otra vez y cerramos el tema ✅\n• Corte: $${haircut}\n• Barba: $${beard}\n\n¿Quieres agendar? Dime día y hora.`
+          : `Here they are again ✅\n• Haircut: $${haircut}\n• Beard: $${beard}\n\nDo you want to book? Tell me day and time.`,
         appointmentCreated: false,
         appointmentError: null,
       };
@@ -2073,8 +2073,8 @@ if (isGreeting) {
 
     return {
       reply: isES
-        ? `Precios:\nâ€¢ Corte: $${haircut}\nâ€¢ Barba: $${beard}\n\nÂ¿Quieres agendar una cita?`
-        : `Prices:\nâ€¢ Haircut: $${haircut}\nâ€¢ Beard: $${beard}\n\nDo you want to book an appointment?`,
+        ? `Precios:\n• Corte: $${haircut}\n• Barba: $${beard}\n\n¿Quieres agendar una cita?`
+        : `Prices:\n• Haircut: $${haircut}\n• Beard: $${beard}\n\nDo you want to book an appointment?`,
       appointmentCreated: false,
       appointmentError: null,
     };
@@ -2082,7 +2082,7 @@ if (isGreeting) {
 }
 
 
-    // Si estÃ¡ pendiente confirmaciÃ³n, SOLO bloquea si el usuario pregunta por eso
+    // Si está pendiente confirmación, SOLO bloquea si el usuario pregunta por eso
     if (sess.pendingConfirmation === true) {
       const q = (prompt || "").toLowerCase();
       const isAboutConfirmation =
@@ -2099,20 +2099,20 @@ if (isGreeting) {
         const isES = (sess.lang || "es") === "es";
         return {
           reply: isES
-            ? "âœ… Ya te enviÃ© el correo de confirmaciÃ³n. Revisa tu inbox/spam y toca **Confirmar cita**. Si no te llegÃ³, dime el correo otra vez."
-            : "âœ… I already sent the confirmation email. Check inbox/spam and click **Confirm appointment**. If it didnâ€™t arrive, tell me the email again.",
+            ? "✅ Ya te envié el correo de confirmación. Revisa tu inbox/spam y toca **Confirmar cita**. Si no te llegó, dime el correo otra vez."
+            : "✅ I already sent the confirmation email. Check inbox/spam and click **Confirm appointment**. If it didn’t arrive, tell me the email again.",
           appointmentCreated: false,
           appointmentError: "PENDING_CONFIRMATION",
         };
       }
     }
 
-    // âœ… Si pregunta por horas cercanas y ya tenemos sugerencias, responder sin LLM
+    // ✅ Si pregunta por horas cercanas y ya tenemos sugerencias, responder sin LLM
     {
       const q = (prompt || "").toLowerCase();
       const asks =
         q.includes("cuales son") ||
-        q.includes("cuÃ¡les son") ||
+        q.includes("cuáles son") ||
         q.includes("horas cercanas") ||
         q.includes("horas disponibles") ||
         q.includes("other times") ||
@@ -2124,14 +2124,14 @@ if (isGreeting) {
         const lines = sess.lastSuggestions
           .map((s) => {
             const t = DateTime.fromISO(s.start, { zone: "utc" }).setZone(tz).toFormat("hh:mm a");
-            return `â€¢ ${t}`;
+            return `• ${t}`;
           })
           .join("\n");
 
         const isES = (sess.lang || detectLang(prompt) || "es") === "es";
         return {
           reply: isES
-            ? `Estas son horas disponibles cercanas:\n${lines}\n\nÂ¿CuÃ¡l quieres?`
+            ? `Estas son horas disponibles cercanas:\n${lines}\n\n¿Cuál quieres?`
             : `Here are nearby available times:\n${lines}\n\nWhich one do you want?`,
           appointmentCreated: false,
           appointmentError: "SUGGESTIONS",
@@ -2140,13 +2140,13 @@ if (isGreeting) {
       }
     }
 
-    // Si el usuario repite lo mismo muchas veces, corta el loop y dirige a acciÃ³n
+    // Si el usuario repite lo mismo muchas veces, corta el loop y dirige a acción
 if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
   const isES = (sess.lang || detectLang(prompt) || "es") === "es";
   return {
     reply: isES
-      ? "Ya te compartÃ­ los precios âœ… Si quieres, dime: **servicio + dÃ­a + hora** y te agendo."
-      : "I already shared the prices âœ… If you want, tell me: **service + day + time** and Iâ€™ll book it.",
+      ? "Ya te compartí los precios ✅ Si quieres, dime: **servicio + día + hora** y te agendo."
+      : "I already shared the prices ✅ If you want, tell me: **service + day + time** and I’ll book it.",
     appointmentCreated: false,
     appointmentError: null,
   };
@@ -2182,7 +2182,7 @@ if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
         const raw = JSON.parse(jsonStr);
 
         const startDT = DateTime.fromISO(raw.start, { zone: tz });
-        if (!startDT.isValid) throw new Error("Fecha de inicio invÃ¡lida en appointment");
+        if (!startDT.isValid) throw new Error("Fecha de inicio inválida en appointment");
 
         let endDT = raw.end ? DateTime.fromISO(raw.end, { zone: tz }) : null;
         if (!endDT || !endDT.isValid) endDT = startDT.plus({ minutes: 30 });
@@ -2209,15 +2209,15 @@ if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
 
           return {
             reply: isES
-              ? "Lo siento ðŸ˜• esa hora ya no estÃ¡ disponible. Te dejo opciones cercanas:"
-              : "Sorry ðŸ˜• that time is no longer available. Here are nearby options:",
+              ? "Lo siento 😕 esa hora ya no está disponible. Te dejo opciones cercanas:"
+              : "Sorry 😕 that time is no longer available. Here are nearby options:",
             appointmentCreated: false,
             appointmentError: "CONFLICT",
             suggestions,
           };
         }
 
-        // 2) crear PENDING + mandar email con confirmaciÃ³n
+        // 2) crear PENDING + mandar email con confirmación
         const lang =
           sess.lang ||
           (() => {
@@ -2250,8 +2250,8 @@ if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
           return {
             reply:
               lang === "es"
-                ? "Perfecto. Solo me falta tu **email** para enviarte el botÃ³n de confirmaciÃ³n âœ…"
-                : "Perfect. I only need your **email** to send the confirmation button âœ…",
+                ? "Perfecto. Solo me falta tu **email** para enviarte el botón de confirmación ✅"
+                : "Perfect. I only need your **email** to send the confirmation button ✅",
             appointmentCreated,
             appointmentError,
           };
@@ -2267,7 +2267,7 @@ if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
 
         const timeStr = DateTime.fromISO(pending.start, { zone: "utc" })
           .setZone(tz)
-          .toFormat("MMM dd, yyyy â€¢ hh:mm a");
+          .toFormat("MMM dd, yyyy • hh:mm a");
 
         const isES = lang === "es";
         const subject = isES ? "Confirma tu cita" : "Confirm your appointment";
@@ -2280,7 +2280,7 @@ if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
           <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;max-width:560px;margin:auto;background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden">
             <div style="background:#111827;color:#fff;padding:18px 22px">
               <h2 style="margin:0;font-size:18px">${businessName}</h2>
-              <p style="margin:6px 0 0;opacity:.9">${isES ? "ConfirmaciÃ³n requerida" : "Confirmation required"}</p>
+              <p style="margin:6px 0 0;opacity:.9">${isES ? "Confirmación requerida" : "Confirmation required"}</p>
             </div>
             <div style="padding:20px 22px;color:#111">
               <p style="margin:0 0 10px">${isES ? "Hola" : "Hi"} <strong>${pending.customer_name || ""}</strong>,</p>
@@ -2311,8 +2311,8 @@ if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
 
         return {
           reply: isES
-            ? "Perfecto. Te enviÃ© un correo para confirmar la cita. âœ… Revisa tu inbox y dale click a **Confirmar cita**."
-            : "Perfect. I sent you an email to confirm the appointment. âœ… Check your inbox and click **Confirm appointment**.",
+            ? "Perfecto. Te envié un correo para confirmar la cita. ✅ Revisa tu inbox y dale click a **Confirmar cita**."
+            : "Perfect. I sent you an email to confirm the appointment. ✅ Check your inbox and click **Confirm appointment**.",
           appointmentCreated,
           appointmentError,
         };

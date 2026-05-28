@@ -42,8 +42,8 @@ export function clearAuthCookie(res) {
 // ===== CLIENT =====
 const CLIENT_COOKIE = "aidash_client";
 
-export function signClient(payload) {
-  return jwt.sign(payload, SECRET, { expiresIn: "7d" });
+export function signClient(payload, remember = false) {
+  return jwt.sign(payload, SECRET, { expiresIn: remember ? "30d" : "2h" });
 }
 
 export function verifyClient(req, res, next) {
@@ -61,12 +61,12 @@ export function verifyClient(req, res, next) {
   }
 }
 
-export function setClientCookie(res, token) {
+export function setClientCookie(res, token, remember = false) {
   res.cookie(CLIENT_COOKIE, token, {
     httpOnly: true,
     secure: SECURE,
     sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000,
   });
 }
 

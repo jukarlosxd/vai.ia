@@ -8,7 +8,7 @@ import nodemailer from "nodemailer";
 import { DateTime } from "luxon";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcrypt";
-import { findAdminByEmail, findClientByEmail } from "./auth/supabase.js";
+import { findAdminByEmail, findClientByEmail, upsertClientUser } from "./auth/supabase.js";
 import { validatePassword } from "./auth/users.js";
 import Groq from "groq-sdk";
 import crypto from "crypto";
@@ -71,6 +71,12 @@ async function deletePending(token) {
 const app = express();
 
 app.use(cookieParser());
+
+// OTP store: email -> { code, expires, slug }
+const otpStore = new Map();
+function generateOtp() { return String(Math.floor(100000 + Math.random() * 900000)); }
+function cleanExpiredOtps() { const now = Date.now(); for (const [k,v] of otpStore) if (v.expires < now) otpStore.delete(k); }
+setInterval(cleanExpiredOtps, 60_000);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -321,7 +327,7 @@ app.post(
   "/client/auth/login",
   express.json(),
   async (req, res) => {
-    const { email, password } = req.body || {};
+    const { email, password, remember } = req.body || {};
     if (!email || !password) return res.status(400).json({ ok:false, error:"Missing fields" });
 
     const user = await findClientByEmail(String(email).trim());
@@ -330,17 +336,77 @@ app.post(
     const ok = await validatePassword(password, user.password_hash);
     if (!ok) return res.status(401).json({ ok:false, error:"Invalid credentials" });
 
-    const token = signClient({
-      id: user.id,
-      email: user.email,
-      role: "client",
-      slug: user.tenant_slug,
-    });
+    // Check if first-time login needs OTP
+    try {
+      const cfg = await loadTenant(user.tenant_slug);
+      if (cfg.client_verified === false) {
+        // Generate and send OTP
+        const code = generateOtp();
+        otpStore.set(user.email, { code, expires: Date.now() + 10 * 60 * 1000, slug: user.tenant_slug, remember: !!remember });
+        const { sendEmail } = await import("./mailer.js");
+        await sendEmail({
+          to: user.email,
+          subject: "VAI.ia — Tu código de verificación",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#04040a;color:#f0eeff;border-radius:16px">
+            <h2 style="color:#64CEFB;margin-bottom:8px">VAI<span style="color:#a78bfa">.ia</span></h2>
+            <p style="color:#a0a0c0;margin-bottom:24px">Tu código de verificación para el primer acceso:</p>
+            <div style="font-size:40px;font-weight:700;letter-spacing:12px;text-align:center;padding:24px;background:rgba(100,206,251,.08);border:1px solid rgba(100,206,251,.2);border-radius:12px;color:#64CEFB">${code}</div>
+            <p style="color:#a0a0c0;margin-top:20px;font-size:13px">Este código expira en <strong>10 minutos</strong>. No lo compartas con nadie.</p>
+          </div>`
+        });
+        return res.json({ ok:false, needsOtp:true, email: user.email });
+      }
+    } catch(e) {
+      console.error("[LOGIN] OTP check error:", e.message);
+    }
 
-    setClientCookie(res, token);
+    const token = signClient({
+      id: user.id, email: user.email, role: "client", slug: user.tenant_slug,
+    }, !!remember);
+
+    setClientCookie(res, token, !!remember);
     return res.json({ ok:true, redirectTo:"/client" });
   }
 );
+
+// OTP verification route
+app.post("/client/auth/verify-otp", express.json(), async (req, res) => {
+  const { email, code } = req.body || {};
+  if (!email || !code) return res.status(400).json({ ok:false, error:"Missing fields" });
+
+  const entry = otpStore.get(email.toLowerCase().trim());
+  if (!entry) return res.status(400).json({ ok:false, error:"Code expired or not found" });
+  if (Date.now() > entry.expires) {
+    otpStore.delete(email);
+    return res.status(400).json({ ok:false, error:"Code expired" });
+  }
+  if (String(entry.code) !== String(code).trim()) {
+    return res.status(400).json({ ok:false, error:"Invalid code" });
+  }
+
+  // Mark as verified in tenant config
+  try {
+    const tenantFile = path.join(TENANTS_DIR, entry.slug + ".json");
+    const cfg = JSON.parse(await fs.readFile(tenantFile, "utf8"));
+    cfg.client_verified = true;
+    await fs.writeFile(tenantFile, JSON.stringify(cfg, null, 2), "utf8");
+    tenantCache.delete(entry.slug);
+  } catch(e) {
+    console.error("[OTP] update verified error:", e.message);
+  }
+
+  otpStore.delete(email);
+
+  const user = await findClientByEmail(email);
+  if (!user) return res.status(400).json({ ok:false, error:"User not found" });
+
+  const token = signClient({
+    id: user.id, email: user.email, role: "client", slug: user.tenant_slug,
+  }, entry.remember);
+
+  setClientCookie(res, token, entry.remember);
+  return res.json({ ok:true, redirectTo:"/client" });
+});
 
 
 // LOGOUT
@@ -606,16 +672,24 @@ app.get("/admin/api/tenant/:slug", verifyAdmin, async (req,res)=>{
 
 app.post("/admin/api/tenant/save", verifyAdmin, async (req,res)=>{
   try{
-    const { slug, config } = req.body || {};
+    const { slug, config, client_email, client_password } = req.body || {};
     if(!slug || !config) {
       return res.status(400).json({ error:"missing data" });
+    }
+
+    // Si viene email+password, crear/actualizar usuario en Supabase
+    if (client_email && client_password) {
+      const { hashPassword } = await import("./auth/users.js");
+      const hash = await hashPassword(client_password);
+      await upsertClientUser(slug, client_email, hash);
+      // Marcar que requiere verificación en primer login
+      config.client_verified = false;
     }
 
     const file = path.join(TENANTS_DIR, `${slug}.json`);
     await fs.writeFile(file, JSON.stringify(config,null,2), "utf8");
 
-    tenantCache.delete(slug); // refrescar cache
-    // Clear active sessions so new prompt takes effect immediately
+    tenantCache.delete(slug);
     if (typeof sessions !== "undefined") {
       for (const [key] of sessions) {
         if (key.startsWith(slug + ":") || key === slug) sessions.delete(key);

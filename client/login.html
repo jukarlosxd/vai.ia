@@ -93,6 +93,17 @@ video.bg-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover
 @keyframes spin{to{transform:rotate(360deg)}}
 
 .error-box{display:none;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:10px;padding:11px 14px;color:var(--danger);font-size:13px;margin-top:14px}
+.remember-row{display:flex;align-items:center;gap:8px;margin:14px 0 4px}
+.remember-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.remember-row label{font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.otp-panel{display:none}
+.otp-inputs{display:flex;gap:10px;justify-content:center;margin:20px 0}
+.otp-inputs input{width:48px;height:56px;text-align:center;font-size:22px;font-weight:700;background:var(--input-bg);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:'Inter',sans-serif;outline:none;transition:border-color .2s}
+.otp-inputs input:focus{border-color:var(--border-focus);background:rgba(100,206,251,.04)}
+.otp-back{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:0;font-family:'Inter',sans-serif;margin-top:8px;text-decoration:underline}
+.otp-back:hover{color:var(--text)}
+.otp-email-hint{font-size:13px;color:var(--muted);text-align:center;margin-bottom:4px}
+.otp-email-hint strong{color:var(--text)}
 
 .divider{display:flex;align-items:center;gap:12px;margin:24px 0;color:var(--muted);font-size:12px}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -194,6 +205,10 @@ video.bg-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover
           </div>
         </div>
 
+        <div class="remember-row">
+          <input type="checkbox" id="rememberMe" name="remember">
+          <label for="rememberMe" id="rememberLabel">Save session (30 days)</label>
+        </div>
         <button type="submit" class="submit-btn" id="submitBtn">
           <span id="btnText">Sign in</span>
           <div class="spinner" id="spinner"></div>
@@ -202,6 +217,31 @@ video.bg-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover
 
         <div class="error-box" id="errorBox">Invalid credentials. Please try again.</div>
       </form>
+
+      <!-- OTP Step -->
+      <div class="otp-panel" id="otpPanel">
+        <div class="form-header" style="margin-bottom:20px">
+          <div class="form-eyebrow" id="otpEyebrow">Security</div>
+          <div class="form-title" id="otpTitle">Check your email</div>
+          <p class="otp-email-hint" id="otpHint">Enter the 6-digit code sent to <strong id="otpEmailSpan"></strong></p>
+        </div>
+        <div class="otp-inputs">
+          <input type="text" maxlength="1" class="otp-digit" id="d0" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" id="d1" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" id="d2" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" id="d3" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" id="d4" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" id="d5" inputmode="numeric">
+        </div>
+        <button type="button" class="submit-btn" id="otpBtn" onclick="submitOtp()">
+          <span id="otpBtnText">Verify</span>
+          <div class="spinner" id="otpSpinner"></div>
+        </button>
+        <div class="error-box" id="otpError"></div>
+        <div style="text-align:center;margin-top:16px">
+          <button class="otp-back" onclick="backToLogin()" id="otpBack">← Back to login</button>
+        </div>
+      </div>
 
       <div class="divider"><span id="divText">or</span></div>
       <div class="admin-link">
@@ -226,7 +266,10 @@ const t = {
     f3t: 'Statistics', f3s: '— Track your business performance',
     divText: 'or', adminText: 'Are you an admin?', adminLink: ' Admin panel',
     error: 'Invalid credentials. Please try again.',
-    langBtn: 'ES'
+    langBtn: 'ES',
+    rememberLabel: 'Save session (30 days)',
+    otpEyebrow: 'Security', otpTitle: 'Check your email', otpHint: 'Enter the 6-digit code sent to',
+    otpBtn: 'Verify', otpBack: '← Back to login'
   },
   es: {
     eyebrow: 'Portal de Cliente', title: 'Bienvenido', sub: 'Inicia sesion para acceder a tu cuenta',
@@ -238,7 +281,10 @@ const t = {
     f3t: 'Estadisticas', f3s: '— Monitorea el rendimiento de tu negocio',
     divText: 'o', adminText: 'Eres administrador?', adminLink: ' Panel de admin',
     error: 'Credenciales invalidas. Por favor intenta de nuevo.',
-    langBtn: 'EN'
+    langBtn: 'EN',
+    rememberLabel: 'Guardar sesion (30 dias)',
+    otpEyebrow: 'Seguridad', otpTitle: 'Revisa tu correo', otpHint: 'Ingresa el codigo de 6 digitos enviado a',
+    otpBtn: 'Verificar', otpBack: '← Volver al login'
   }
 };
 
@@ -263,7 +309,17 @@ function applyLang() {
   document.getElementById('adminText').textContent = d.adminText;
   document.getElementById('adminLink').textContent = d.adminLink;
   document.getElementById('langBtn').textContent = d.langBtn;
+  document.getElementById('rememberLabel').textContent = d.rememberLabel;
   document.documentElement.lang = lang;
+}
+
+function applyLangOtp() {
+  const d = t[lang];
+  document.getElementById('otpEyebrow').textContent = d.otpEyebrow;
+  document.getElementById('otpTitle').textContent = d.otpTitle;
+  document.getElementById('otpHint').childNodes[0].textContent = d.otpHint + ' ';
+  document.getElementById('otpBtnText').textContent = d.otpBtn;
+  document.getElementById('otpBack').textContent = d.otpBack;
 }
 
 function toggleLang() {
@@ -283,6 +339,69 @@ function togglePass() {
     inp.type = 'password';
     open.style.display = 'block';
     closed.style.display = 'none';
+  }
+}
+
+// OTP digit auto-advance
+document.querySelectorAll('.otp-digit').forEach((inp, i, all) => {
+  inp.addEventListener('input', () => {
+    inp.value = inp.value.replace(/\D/g,'');
+    if (inp.value && i < all.length - 1) all[i+1].focus();
+    if (getOtpCode().length === 6) submitOtp();
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !inp.value && i > 0) all[i-1].focus();
+  });
+});
+
+function getOtpCode() {
+  return Array.from(document.querySelectorAll('.otp-digit')).map(d=>d.value).join('');
+}
+
+let pendingEmail = '';
+
+function showOtpPanel(email) {
+  pendingEmail = email;
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('otpPanel').style.display = 'block';
+  document.getElementById('otpEmailSpan').textContent = email;
+  document.getElementById('d0').focus();
+  applyLangOtp();
+}
+
+function backToLogin() {
+  document.getElementById('otpPanel').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+  document.querySelectorAll('.otp-digit').forEach(d => d.value = '');
+  document.getElementById('otpError').style.display = 'none';
+}
+
+async function submitOtp() {
+  const code = getOtpCode();
+  if (code.length < 6) return;
+  const btn = document.getElementById('otpBtn');
+  const spin = document.getElementById('otpSpinner');
+  const txt = document.getElementById('otpBtnText');
+  const err = document.getElementById('otpError');
+  btn.disabled = true; spin.style.display = 'block'; txt.style.display = 'none'; err.style.display = 'none';
+  try {
+    const res = await fetch('/client/auth/verify-otp', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email: pendingEmail, code })
+    });
+    const data = await res.json();
+    if (data.ok) { window.location.href = data.redirectTo || '/client'; }
+    else {
+      err.textContent = data.error || (lang==='en'?'Invalid code':'Código inválido');
+      err.style.display = 'block';
+      document.querySelectorAll('.otp-digit').forEach(d=>d.value='');
+      document.getElementById('d0').focus();
+      btn.disabled = false; spin.style.display = 'none'; txt.style.display = 'block';
+    }
+  } catch {
+    err.textContent = lang==='en'?'Connection error':'Error de conexión';
+    err.style.display = 'block';
+    btn.disabled = false; spin.style.display = 'none'; txt.style.display = 'block';
   }
 }
 
@@ -306,28 +425,29 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         email: document.getElementById('email').value.trim(),
-        password: document.getElementById('password').value
+        password: document.getElementById('password').value,
+        remember: document.getElementById('rememberMe').checked
       })
     });
     const data = await res.json();
-    if (data.ok) {
+    if (data.needsOtp) {
+      showOtpPanel(data.email);
+      btn.disabled = false; txt.textContent = t[lang].btn;
+      spin.style.display = 'none'; arrow.style.display = 'block';
+    } else if (data.ok) {
       txt.textContent = lang === 'en' ? 'Redirecting...' : 'Redirigiendo...';
       window.location.href = data.redirectTo || '/client';
     } else {
       err.textContent = t[lang].error;
       err.style.display = 'block';
-      btn.disabled = false;
-      txt.textContent = t[lang].btn;
-      spin.style.display = 'none';
-      arrow.style.display = 'block';
+      btn.disabled = false; txt.textContent = t[lang].btn;
+      spin.style.display = 'none'; arrow.style.display = 'block';
     }
   } catch {
     err.textContent = lang === 'en' ? 'Connection error. Please try again.' : 'Error de conexion. Intenta de nuevo.';
     err.style.display = 'block';
-    btn.disabled = false;
-    txt.textContent = t[lang].btn;
-    spin.style.display = 'none';
-    arrow.style.display = 'block';
+    btn.disabled = false; txt.textContent = t[lang].btn;
+    spin.style.display = 'none'; arrow.style.display = 'block';
   }
 });
 </script>

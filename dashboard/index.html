@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VAI.ia — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#04040a;--surface:rgba(255,255,255,.03);--surface2:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
+  --accent:#64CEFB;--accent2:#a78bfa;--accent3:#34d399;
+  --text:#f0eeff;--muted:rgba(240,238,255,.45);--muted2:rgba(240,238,255,.22);
+  --danger:#f87171;--warning:#fbbf24;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+.topbar{height:64px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 36px;background:rgba(4,4,10,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-circle{width:30px;height:30px;border-radius:50%;border:1.5px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center}
+.brand-dot{width:12px;height:12px;border-radius:50%;background:#fff}
+.brand-name{font-size:16px;font-weight:600}
+.brand-name span{color:var(--accent)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#4db8e8);border:none;border-radius:10px;padding:9px 18px;color:#04040a;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .2s}
+.btn-primary:hover{opacity:.88}
+.btn-secondary{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:9px 16px;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+.btn-secondary:hover{color:var(--text)}
+
+.content{padding:40px 36px;max-width:1200px;margin:0 auto}
+.page-header{margin-bottom:32px}
+.page-header h1{font-size:26px;font-weight:600;letter-spacing:-.4px;margin-bottom:6px}
+.page-header p{font-size:14px;color:var(--muted)}
+
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:36px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 22px}
+.stat-card-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px;font-weight:500}
+.stat-card-value{font-size:30px;font-weight:600;letter-spacing:-.5px}
+
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.section-header h2{font-size:15px;font-weight:600}
+.section-header span{font-size:13px;color:var(--muted)}
+
+.clients-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px}
+
+.client-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:22px;cursor:pointer;
+  transition:all .2s;position:relative;
+  text-decoration:none;color:inherit;display:block;
+}
+.client-card:hover{border-color:var(--border2);background:var(--surface2);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.client-card-top{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.client-avatar{width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;color:#04040a;flex-shrink:0}
+.client-name{font-size:15px;font-weight:600;margin-bottom:3px}
+.client-slug{font-size:12px;color:var(--muted);font-family:monospace}
+.client-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.client-stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}
+.client-stat-val{font-size:18px;font-weight:700;letter-spacing:-.3px;margin-bottom:2px}
+.client-stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.client-card-footer{display:flex;align-items:center;justify-content:space-between}
+.chips{display:flex;gap:6px}
+.chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.chip-green{background:rgba(52,211,153,.1);color:var(--accent3);border:1px solid rgba(52,211,153,.2)}
+.chip-blue{background:rgba(100,206,251,.1);color:var(--accent);border:1px solid rgba(100,206,251,.2)}
+.client-arrow{color:var(--muted2);font-size:18px;transition:transform .15s}
+.client-card:hover .client-arrow{transform:translateX(4px);color:var(--accent)}
+.client-del-btn{
+  position:absolute;top:14px;right:14px;
+  background:none;border:none;color:var(--muted2);
+  cursor:pointer;font-size:15px;opacity:0;transition:opacity .15s;
+  padding:4px;
+}
+.client-card:hover .client-del-btn{opacity:1}
+.client-del-btn:hover{color:var(--danger)}
+
+.loading{text-align:center;padding:60px;color:var(--muted)}
+.empty-state{text-align:center;padding:80px 20px;color:var(--muted);grid-column:1/-1}
+.empty-state h3{font-size:18px;font-weight:500;margin-bottom:8px;color:var(--text)}
+.empty-state p{font-size:14px;margin-bottom:24px}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(8px)}
+.modal-overlay.open{display:flex}
+.modal{background:#0a0a14;border:1px solid var(--border2);border-radius:20px;padding:32px;width:100%;max-width:480px;box-shadow:0 40px 100px rgba(0,0,0,.6)}
+.modal h3{font-size:18px;font-weight:600;margin-bottom:6px}
+.modal-sub{font-size:13px;color:var(--muted);margin-bottom:24px}
+.modal-field{margin-bottom:16px}
+.modal-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:7px;font-weight:500;letter-spacing:.2px}
+.modal-field input,.modal-field textarea{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color .2s}
+.modal-field input:focus,.modal-field textarea:focus{border-color:rgba(100,206,251,.4)}
+.modal-field textarea{resize:vertical;min-height:90px;font-family:monospace;font-size:13px}
+.modal-field input::placeholder,.modal-field textarea::placeholder{color:rgba(255,255,255,.2)}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.modal-error{display:none;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:10px 14px;color:var(--danger);font-size:13px;margin-top:10px}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:#0a0a14;border:1px solid var(--border2);border-radius:10px;padding:12px 20px;font-size:14px;z-index:9999;transform:translateY(80px);opacity:0;transition:all .3s;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{border-color:rgba(52,211,153,.4);color:var(--accent3)}
+.toast.error{border-color:rgba(248,113,113,.4);color:var(--danger)}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.client-card{animation:fadeUp .3s ease both}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-circle"><div class="brand-dot"></div></div>
+    <div class="brand-name">VAI<span>.ia</span></div>
+  </div>
+  <div class="topbar-right">
+    <button class="btn-primary" onclick="openModal()">+ Add Client</button>
+    <button class="btn-secondary" onclick="logout()">Sign out</button>
+  </div>
+</div>
+
+<div class="content">
+  <div class="page-header">
+    <h1>Client Dashboard</h1>
+    <p>Manage all your VAI.ia clients from one place.</p>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-card-label">Total Clients</div><div class="stat-card-value" id="st-total">—</div></div>
+    <div class="stat-card"><div class="stat-card-label">Active</div><div class="stat-card-value" id="st-active">—</div></div>
+    <div class="stat-card"><div class="stat-card-label">Total Appointments</div><div class="stat-card-value" id="st-appts">—</div></div>
+    <div class="stat-card"><div class="stat-card-label">This Month</div><div class="stat-card-value" id="st-month">—</div></div>
+  </div>
+
+  <div class="section-header">
+    <h2>Clients</h2>
+    <span id="client-count"></span>
+  </div>
+
+  <div class="clients-grid" id="clientsGrid">
+    <div class="loading">Loading clients...</div>
+  </div>
+</div>
+
+<!-- ADD CLIENT MODAL -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h3>Add New Client</h3>
+    <p class="modal-sub">Create a client account and configure their AI assistant.</p>
+    <div class="modal-grid">
+      <div class="modal-field">
+        <label>Slug (unique ID)</label>
+        <input id="nc_slug" placeholder="barbershop-jose" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')">
+      </div>
+      <div class="modal-field">
+        <label>Business Name</label>
+        <input id="nc_name" placeholder="Jose's Barbershop">
+      </div>
+      <div class="modal-field">
+        <label>Client Email</label>
+        <input type="email" id="nc_email" placeholder="jose@business.com">
+      </div>
+      <div class="modal-field">
+        <label>Password</label>
+        <input type="password" id="nc_password" placeholder="Min 8 characters">
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>System Prompt</label>
+      <textarea id="nc_system" placeholder="You are the assistant of Jose's Barbershop. Help clients book appointments and answer questions. Always be friendly and professional. IMPORTANT: Always respond in the same language the client writes in."></textarea>
+    </div>
+    <div class="modal-error" id="nc_error"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="createClient()">Create Client</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(async () => { await loadClients(); })();
+
+async function loadClients() {
+  try {
+    const res = await fetch('/admin/api/tenants', {credentials:'include'});
+    const d = await res.json();
+    if (!d.tenants) { window.location.href = '/login'; return; }
+    const clients = d.tenants;
+    document.getElementById('st-total').textContent = clients.length;
+    document.getElementById('st-active').textContent = clients.length;
+    document.getElementById('client-count').textContent = clients.length + ' client' + (clients.length !== 1 ? 's' : '');
+    if (clients.length === 0) {
+      document.getElementById('clientsGrid').innerHTML = '<div class="empty-state"><h3>No clients yet</h3><p>Add your first client to get started.</p><button class="btn-primary" onclick="openModal()">+ Add Client</button></div>';
+      document.getElementById('st-appts').textContent = '0';
+      document.getElementById('st-month').textContent = '0';
+      return;
+    }
+    let totalAppts = 0, monthAppts = 0;
+    const now = new Date();
+    const cards = await Promise.all(clients.map(async (slug, i) => {
+      let appts = [];
+      try {
+        const r = await fetch('/admin/api/appointments/' + slug, {credentials:'include'});
+        const d2 = await r.json();
+        appts = d2.appointments || [];
+      } catch {}
+      totalAppts += appts.length;
+      monthAppts += appts.filter(a => new Date(a.start).getMonth() === now.getMonth() && new Date(a.start).getFullYear() === now.getFullYear()).length;
+      const upcoming = appts.filter(a => new Date(a.start) > now).length;
+      const confirmed = appts.filter(a => a.confirmed).length;
+      return { slug, total: appts.length, upcoming, confirmed, delay: i * 60 };
+    }));
+    document.getElementById('st-appts').textContent = totalAppts;
+    document.getElementById('st-month').textContent = monthAppts;
+    document.getElementById('clientsGrid').innerHTML = cards.map(c => `
+      <a class="client-card" href="/admin/${c.slug}" style="animation-delay:${c.delay}ms">
+        <button class="client-del-btn" onclick="event.preventDefault();event.stopPropagation();deleteClient('${c.slug}')" title="Delete client">&#x2715;</button>
+        <div class="client-card-top">
+          <div class="client-avatar">${c.slug[0].toUpperCase()}</div>
+          <div>
+            <div class="client-name">${c.slug}</div>
+            <div class="client-slug">/${c.slug}</div>
+          </div>
+        </div>
+        <div class="client-stats-row">
+          <div class="client-stat"><div class="client-stat-val">${c.total}</div><div class="client-stat-lbl">Total</div></div>
+          <div class="client-stat"><div class="client-stat-val">${c.upcoming}</div><div class="client-stat-lbl">Upcoming</div></div>
+          <div class="client-stat"><div class="client-stat-val">${c.confirmed}</div><div class="client-stat-lbl">Confirmed</div></div>
+        </div>
+        <div class="client-card-footer">
+          <div class="chips">
+            <span class="chip chip-green">Active</span>
+            <span class="chip chip-blue">AI Ready</span>
+          </div>
+          <span class="client-arrow">&#8250;</span>
+        </div>
+      </a>`).join('');
+  } catch (e) { console.error(e); window.location.href = '/login'; }
+}
+
+async function deleteClient(slug) {
+  if (!confirm('Delete client: ' + slug + '?\nThis action cannot be undone.')) return;
+  try {
+    const res = await fetch('/admin/api/tenant/' + slug, {method:'DELETE', credentials:'include'});
+    const d = await res.json();
+    if (d.ok) { showToast('Client deleted', 'success'); await loadClients(); }
+    else showToast('Error: ' + (d.error || 'unknown'), 'error');
+  } catch { showToast('Connection error', 'error'); }
+}
+
+function openModal() { document.getElementById('addModal').classList.add('open'); }
+function closeModal() { document.getElementById('addModal').classList.remove('open'); }
+
+async function createClient() {
+  const slug = document.getElementById('nc_slug').value.trim();
+  const name = document.getElementById('nc_name').value.trim();
+  const email = document.getElementById('nc_email').value.trim();
+  const password = document.getElementById('nc_password').value.trim();
+  const system = document.getElementById('nc_system').value.trim();
+  const err = document.getElementById('nc_error');
+  const btn = document.getElementById('createBtn');
+  err.style.display = 'none';
+  if (!slug) { err.textContent = 'Slug is required'; err.style.display = 'block'; return; }
+  if (!email) { err.textContent = 'Email is required'; err.style.display = 'block'; return; }
+  if (!password || password.length < 8) { err.textContent = 'Password must be at least 8 characters'; err.style.display = 'block'; return; }
+  btn.textContent = 'Creating...'; btn.disabled = true;
+  const config = {
+    system: system || 'You are the assistant of ' + (name||slug) + '. IMPORTANT: Always respond in the same language the client writes in. Be friendly and professional.',
+    vars: {business: name||slug, name: name||slug},
+    faq: []
+  };
+  try {
+    const res = await fetch('/admin/api/tenant/save', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({slug, config, client_email: email, client_password: password})
+    });
+    const d = await res.json();
+    if (d.ok) {
+      showToast('Client created!', 'success');
+      closeModal();
+      ['nc_slug','nc_name','nc_email','nc_password','nc_system'].forEach(id => { document.getElementById(id).value = ''; });
+      await loadClients();
+    } else { err.textContent = d.error || 'Error creating client'; err.style.display = 'block'; }
+  } catch { err.textContent = 'Connection error'; err.style.display = 'block'; }
+  btn.textContent = 'Create Client'; btn.disabled = false;
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function logout() {
+  await fetch('/auth/logout', {method:'POST', credentials:'include'});
+  window.location.href = '/login';
+}
+</script>
+</body>
+</html>

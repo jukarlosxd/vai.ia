@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ambassador Management — VAI.ia Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#04040a;--s:rgba(255,255,255,.03);--s2:rgba(255,255,255,.06);--b:rgba(255,255,255,.07);--b2:rgba(255,255,255,.12);--ac:#64CEFB;--ac2:#a78bfa;--ac3:#34d399;--tx:#f0eeff;--mt:rgba(240,238,255,.45);--dg:#f87171;--wn:#fbbf24;--border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);--accent:#64CEFB;--muted:rgba(240,238,255,.45)}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+/* TOPBAR */
+.topbar{height:60px;border-bottom:1px solid var(--b);display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:rgba(4,4,10,.96);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--tx)}
+.brand-circle{width:30px;height:30px;border-radius:50%;border:1.5px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center}
+.brand-dot{width:12px;height:12px;border-radius:50%;background:#fff}
+.brand-name{font-size:16px;font-weight:700}.brand-name span{color:var(--ac)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.back-btn{background:var(--s);border:1px solid var(--b2);border-radius:8px;padding:6px 14px;font-size:12px;color:var(--mt);cursor:pointer;font-family:'Inter',sans-serif;text-decoration:none;transition:all .2s}
+.back-btn:hover{color:var(--tx);border-color:var(--ac)}
+/* TABS */
+.tabs-bar{border-bottom:1px solid var(--b);padding:0 28px;display:flex;gap:4px;background:rgba(4,4,10,.8);overflow-x:auto}
+.tab{padding:14px 18px;font-size:13px;font-weight:500;color:var(--mt);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none;font-family:'Inter',sans-serif}
+.tab:hover{color:var(--tx)}
+.tab.active{color:var(--ac);border-bottom-color:var(--ac)}
+/* CONTENT */
+.page{max-width:1300px;margin:0 auto;padding:28px}
+.tab-content{display:none}.tab-content.active{display:block}
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-bottom:28px}
+.stat{background:var(--s);border:1px solid var(--b);border-radius:14px;padding:18px 20px}
+.stat-label{font-size:11px;font-weight:600;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.stat-val{font-size:26px;font-weight:700}
+/* SECTION HEADER */
+.sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.sec-title{font-size:18px;font-weight:700}
+/* BUTTONS */
+.btn-primary{background:linear-gradient(135deg,var(--ac),#4db8e8);border:none;border-radius:10px;padding:9px 20px;color:#04040a;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:opacity .2s}
+.btn-primary:hover{opacity:.88}
+.btn-secondary{background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:8px 16px;color:var(--mt);font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+.btn-secondary:hover{color:var(--tx)}
+/* TABLE */
+.tbl-wrap{background:var(--s);border:1px solid var(--b);border-radius:14px;overflow:hidden;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:900px}
+th{font-size:11px;font-weight:600;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;padding:12px 14px;border-bottom:1px solid var(--b);text-align:left;background:rgba(255,255,255,.02);white-space:nowrap}
+td{padding:13px 14px;font-size:13px;border-bottom:1px solid var(--b);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.action-btn{background:none;border:1px solid var(--b2);border-radius:7px;padding:4px 9px;font-size:11px;color:var(--mt);cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;margin:2px 1px}
+.action-btn:hover{color:var(--tx);border-color:var(--ac)}
+.action-btn.danger:hover{color:var(--dg);border-color:var(--dg)}
+.action-btn.purple:hover{color:var(--ac2);border-color:var(--ac2)}
+.action-btn.green:hover{color:var(--ac3);border-color:var(--ac3)}
+/* STATUS BADGES */
+.badge{display:inline-block;border-radius:6px;padding:2px 9px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.badge-active{background:rgba(52,211,153,.1);color:var(--ac3)}
+.badge-inactive{background:rgba(248,113,113,.08);color:var(--dg)}
+.badge-suspended{background:rgba(251,191,36,.08);color:var(--wn)}
+.badge-pending{background:rgba(251,191,36,.1);color:var(--wn)}
+.badge-approved{background:rgba(52,211,153,.1);color:var(--ac3)}
+.badge-rejected{background:rgba(248,113,113,.1);color:var(--dg)}
+.badge-contacted{background:rgba(100,206,251,.1);color:var(--ac)}
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:flex-start;justify-content:center;backdrop-filter:blur(4px);padding:20px;overflow-y:auto}
+.overlay.open{display:flex}
+.modal{background:#0c0a16;border:1px solid var(--b2);border-radius:20px;padding:32px;width:100%;max-width:640px;margin:auto}
+.modal-title{font-size:20px;font-weight:700;margin-bottom:4px}
+.modal-sub{font-size:13px;color:var(--mt);margin-bottom:28px}
+.form-section-title{font-size:11px;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.6px;margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--b)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.full{grid-column:1/-1}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px}
+.field input,.field select,.field textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--b);border-radius:10px;padding:10px 13px;color:var(--tx);font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:all .2s}
+.field input:focus,.field select:focus{border-color:rgba(100,206,251,.4);background:rgba(100,206,251,.03)}
+.field select option{background:#0c0a16}
+.field .hint{font-size:11px;color:var(--mt);margin-top:5px;opacity:.7}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:40px}
+.pw-eye{position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--mt);cursor:pointer;padding:0;font-size:15px}
+.modal-actions{display:flex;gap:10px;margin-top:24px;justify-content:flex-end}
+.err-box{display:none;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:10px;padding:10px 14px;color:var(--dg);font-size:13px;margin-top:12px}
+.success-box{display:none;background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:10px 14px;color:var(--ac3);font-size:13px;margin-top:12px}
+/* PROFILE */
+.profile-grid{display:grid;grid-template-columns:320px 1fr;gap:20px}
+.profile-card{background:var(--s);border:1px solid var(--b);border-radius:16px;padding:24px}
+.profile-card h3{font-size:13px;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px}
+.profile-row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--b);font-size:13px}
+.profile-row:last-child{border-bottom:none}
+.profile-row-label{color:var(--mt)}
+.profile-row-val{font-weight:500;text-align:right;max-width:180px;word-break:break-word}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.metric{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:16px}
+.metric-val{font-size:22px;font-weight:700;margin-bottom:4px}
+.metric-label{font-size:11px;color:var(--mt)}
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:#1a1730;border:1px solid var(--b2);border-radius:12px;padding:12px 18px;font-size:13px;font-weight:500;z-index:999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.success{border-color:rgba(52,211,153,.3);color:var(--ac3)}
+.toast.error{border-color:rgba(248,113,113,.3);color:var(--dg)}
+/* EMPTY */
+.empty{text-align:center;padding:48px;color:var(--mt)}
+.empty-icon{font-size:36px;margin-bottom:12px}
+@media(max-width:900px){.profile-grid{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="/dashboard">
+    <div class="brand-circle"><div class="brand-dot"></div></div>
+    <div class="brand-name">VAI<span>.ia</span></div>
+  </a>
+  <div style="font-size:13px;color:var(--mt)">Ambassador Management</div>
+  <div class="topbar-right">
+    <a class="back-btn" href="/dashboard">← Dashboard</a>
+  </div>
+</div>
+
+<div class="tabs-bar">
+  <button class="tab active" onclick="showTab('overview')">📊 Overview</button>
+  <button class="tab" onclick="showTab('ambassadors')">👥 Ambassadors</button>
+  <button class="tab" onclick="showTab('applications')">📋 Applications</button>
+  <button class="tab" onclick="showTab('commissions')">💰 Commissions</button>
+  <button class="tab" onclick="showTab('analytics')">📈 Analytics</button>
+</div>
+
+<div class="page">
+
+  <!-- ===== OVERVIEW TAB ===== -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="stats-row" id="overviewStats">
+      <div class="stat"><div class="stat-label">Total Ambassadors</div><div class="stat-val" id="ov-total" style="color:var(--ac)">—</div></div>
+      <div class="stat"><div class="stat-label">Active</div><div class="stat-val" id="ov-active" style="color:var(--ac3)">—</div></div>
+      <div class="stat"><div class="stat-label">Suspended</div><div class="stat-val" id="ov-suspended" style="color:var(--wn)">—</div></div>
+      <div class="stat"><div class="stat-label">Total Clients</div><div class="stat-val" id="ov-clients" style="color:var(--ac2)">—</div></div>
+      <div class="stat"><div class="stat-label">Active Clients</div><div class="stat-val" id="ov-active-clients" style="color:var(--ac3)">—</div></div>
+      <div class="stat"><div class="stat-label">Pending Commissions</div><div class="stat-val" id="ov-pending-comm" style="color:var(--wn)">—</div></div>
+      <div class="stat"><div class="stat-label">Paid Commissions</div><div class="stat-val" id="ov-paid-comm" style="color:var(--ac3)">—</div></div>
+      <div class="stat"><div class="stat-label">Pending Applications</div><div class="stat-val" id="ov-apps" style="color:var(--ac2)">—</div></div>
+    </div>
+    <div class="sec-header"><div class="sec-title">Top Ambassadors</div></div>
+    <div class="tbl-wrap">
+      <table><thead><tr><th>Ambassador</th><th>Referral Code</th><th>Clients</th><th>Active</th><th>Commission %</th><th>Status</th></tr></thead>
+      <tbody id="topAmbBody"><tr><td colspan="6"><div class="empty"><div class="empty-icon">📊</div>Loading...</div></td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- ===== AMBASSADORS TAB ===== -->
+  <div class="tab-content" id="tab-ambassadors">
+    <div class="sec-header">
+      <div class="sec-title">All Ambassadors</div>
+      <div style="display:flex;gap:10px">
+        <input type="text" id="ambSearch" placeholder="Search name or email..." oninput="filterAmbassadors()" style="background:var(--s);border:1px solid var(--b);border-radius:10px;padding:8px 14px;color:var(--tx);font-family:'Inter',sans-serif;font-size:13px;outline:none;width:220px">
+        <button class="btn-primary" onclick="openCreateModal()">+ Create Ambassador</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Name</th><th>Email</th><th>Phone</th>
+          <th>Ref. Code</th><th>Status</th><th>Clients</th><th>Active</th>
+          <th>Setup %</th><th>Monthly %</th><th>Created</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="ambTableBody"><tr><td colspan="12"><div class="empty"><div class="empty-icon">👥</div>Loading...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== APPLICATIONS TAB ===== -->
+  <div class="tab-content" id="tab-applications">
+    <div class="sec-header">
+      <div class="sec-title">Ambassador Applications</div>
+      <span id="appsCount" style="font-size:13px;color:var(--mt)"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Name</th><th>Email</th><th>Phone</th><th>City/State</th>
+          <th>Sales Exp.</th><th>Status</th><th>Submitted</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="appsBody"><tr><td colspan="8"><div class="empty"><div class="empty-icon">📋</div>Loading...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== COMMISSIONS TAB ===== -->
+  <div class="tab-content" id="tab-commissions">
+    <div class="sec-header"><div class="sec-title">Commission Overview</div></div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-label">Total Pending</div><div class="stat-val" id="comm-pending" style="color:var(--wn)">—</div></div>
+      <div class="stat"><div class="stat-label">Total Paid</div><div class="stat-val" id="comm-paid" style="color:var(--ac3)">—</div></div>
+      <div class="stat"><div class="stat-label">Setup Pending</div><div class="stat-val" id="comm-setup-pend" style="color:var(--wn)">—</div></div>
+      <div class="stat"><div class="stat-label">Monthly Pending</div><div class="stat-val" id="comm-monthly-pend" style="color:var(--wn)">—</div></div>
+    </div>
+    <div class="sec-header" style="margin-top:8px"><div class="sec-title">Clients Pending Commission</div></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Business</th><th>Ambassador</th><th>Status</th>
+          <th>Setup Fee</th><th>Setup Paid?</th><th>Setup Comm.</th><th>Comm. Paid?</th>
+          <th>Monthly</th><th>Monthly Paid?</th><th>Monthly Comm.</th><th>M.Comm. Paid?</th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody id="commBody"><tr><td colspan="12"><div class="empty"><div class="empty-icon">💰</div>Loading...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== ANALYTICS TAB ===== -->
+  <div class="tab-content" id="tab-analytics">
+    <div class="sec-header"><div class="sec-title">Performance Analytics</div></div>
+    <div class="stats-row" id="analyticsStats"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px">
+      <div>
+        <div class="sec-title" style="font-size:14px;margin-bottom:12px">By Status</div>
+        <div id="statusBreakdown" style="background:var(--s);border:1px solid var(--b);border-radius:14px;padding:20px"></div>
+      </div>
+      <div>
+        <div class="sec-title" style="font-size:14px;margin-bottom:12px">Top Performers</div>
+        <div id="topPerformers" style="background:var(--s);border:1px solid var(--b);border-radius:14px;padding:20px"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<!-- ===== CREATE AMBASSADOR MODAL ===== -->
+<div class="overlay" id="createModal">
+<div class="modal">
+  <div class="modal-title" id="createModalTitle">Create Ambassador</div>
+  <div class="modal-sub">Fill in the details to create a new ambassador account.</div>
+
+  <div class="form-section-title">Personal Information</div>
+  <div class="form-grid">
+    <div class="field full"><label>Full Name *</label><input type="text" id="cr_name" placeholder="John Smith"></div>
+    <div class="field"><label>Email Address *</label><input type="email" id="cr_email" placeholder="john@email.com"></div>
+    <div class="field"><label>Phone Number *</label><input type="tel" id="cr_phone" placeholder="+1 555 000 0000"></div>
+    <div class="field"><label>City</label><input type="text" id="cr_city" placeholder="Miami"></div>
+    <div class="field"><label>State</label><input type="text" id="cr_state" placeholder="FL"></div>
+    <div class="field"><label>Country</label><input type="text" id="cr_country" placeholder="USA" value="USA"></div>
+  </div>
+
+  <div class="form-section-title">Account Settings</div>
+  <div class="form-grid">
+    <div class="field"><label>Username <span style="opacity:.5">(auto if empty)</span></label><input type="text" id="cr_username" placeholder="john.smith"><div class="hint">Leave blank to auto-generate</div></div>
+    <div class="field"><label>Status</label>
+      <select id="cr_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option></select>
+    </div>
+    <div class="field"><label>Password *</label>
+      <div class="pw-wrap"><input type="password" id="cr_password" placeholder="Min 8 characters"><button type="button" class="pw-eye" onclick="togglePw('cr_password',this)">👁</button></div>
+    </div>
+    <div class="field"><label>Confirm Password *</label>
+      <div class="pw-wrap"><input type="password" id="cr_confirm" placeholder="Repeat password"><button type="button" class="pw-eye" onclick="togglePw('cr_confirm',this)">👁</button></div>
+    </div>
+  </div>
+
+  <div class="form-section-title">Commission Settings</div>
+  <div class="form-grid">
+    <div class="field"><label>Setup Fee Commission %</label><input type="number" id="cr_setup_pct" value="10" min="0" max="100" step="0.5"><div class="hint">% of setup fee earned</div></div>
+    <div class="field"><label>Monthly Recurring %</label><input type="number" id="cr_monthly_pct" value="10" min="0" max="100" step="0.5"><div class="hint">% of monthly plan</div></div>
+    <div class="field full"><label>Bonus Commission % <span style="opacity:.5">(optional)</span></label><input type="number" id="cr_bonus_pct" value="0" min="0" max="100" step="0.5"></div>
+  </div>
+
+  <div class="err-box" id="createErr"></div>
+  <div class="success-box" id="createSuccess"></div>
+
+  <div class="modal-actions">
+    <button class="btn-secondary" onclick="closeCreateModal()">Cancel</button>
+    <button class="btn-primary" id="createSaveBtn" onclick="saveAmbassador()">Create Ambassador</button>
+  </div>
+</div>
+</div>
+
+<!-- ===== APPLICATION DETAIL MODAL ===== -->
+<div class="overlay" id="appModal">
+<div class="modal">
+  <div class="modal-title" id="appModalName">Application</div>
+  <div id="appModalBody" style="margin-bottom:16px"></div>
+  <div class="form-section-title">Admin Actions</div>
+  <div class="form-grid">
+    <div class="field"><label>Status</label>
+      <select id="app_status"><option>Pending Review</option><option>Contacted</option><option>Approved</option><option>Rejected</option></select>
+    </div>
+    <div class="field full"><label>Admin Notes</label><textarea id="app_notes" style="resize:vertical;min-height:70px"></textarea></div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn-secondary" onclick="closeAppModal()">Close</button>
+    <button id="createFromAppBtn" class="btn-secondary" onclick="createFromApp()" style="display:none;color:var(--ac3);border-color:rgba(52,211,153,.3)">✓ Create Ambassador Account</button>
+    <button class="btn-primary" onclick="saveApp()">Save</button>
+  </div>
+</div>
+</div>
+
+<!-- ===== PROFILE MODAL ===== -->
+<div class="overlay" id="profileModal">
+<div class="modal" style="max-width:800px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div class="modal-title" id="profileName">Ambassador Profile</div>
+    <button onclick="closeProfile()" style="background:none;border:none;color:var(--mt);cursor:pointer;font-size:20px">✕</button>
+  </div>
+  <div id="profileBody"></div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let ambassadors = [];
+let allAmbClients = [];
+let allApplications = [];
+let editingAmbId = null;
+let currentAppId = null;
+let filteredAmb = [];
+
+// ========== INIT ==========
+async function init() {
+  await loadAll();
+  renderOverview();
+}
+
+async function loadAll() {
+  try {
+    const [ambRes, clientRes, appRes] = await Promise.all([
+      fetch('/admin/api/ambassadors', {credentials:'include'}),
+      fetch('/admin/api/ambassador-clients', {credentials:'include'}),
+      fetch('/admin/api/ambassador-applications', {credentials:'include'})
+    ]);
+    if (!ambRes.ok) { window.location.href='/admin/login'; return; }
+    ambassadors = await ambRes.json();
+    allAmbClients = (clientRes.ok ? await clientRes.json() : []);
+    allApplications = (appRes.ok ? await appRes.json() : []);
+    filteredAmb = [...ambassadors];
+  } catch(e) { console.error('Load error:', e); }
+}
+
+// ========== TABS ==========
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'ambassadors') renderAmbTable(filteredAmb);
+  if (tab === 'applications') renderApps();
+  if (tab === 'commissions') renderCommissions();
+  if (tab === 'analytics') renderAnalytics();
+}
+
+// ========== OVERVIEW ==========
+function renderOverview() {
+  const total = ambassadors.length;
+  const active = ambassadors.filter(a=>a.status==='active').length;
+  const suspended = ambassadors.filter(a=>a.status==='suspended').length;
+  const totalClients = allAmbClients.length;
+  const activeClients = allAmbClients.filter(c=>c.status==='Active').length;
+  const pendingApps = allApplications.filter(a=>a.status==='Pending Review').length;
+
+  document.getElementById('ov-total').textContent = total;
+  document.getElementById('ov-active').textContent = active;
+  document.getElementById('ov-suspended').textContent = suspended;
+  document.getElementById('ov-clients').textContent = totalClients;
+  document.getElementById('ov-active-clients').textContent = activeClients;
+  document.getElementById('ov-apps').textContent = pendingApps;
+
+  let pendingComm = 0, paidComm = 0;
+  ambassadors.forEach(a => {
+    const clients = allAmbClients.filter(c=>c.ambassador_id===a.id);
+    const sRate = (a.setup_commission_pct||0)/100;
+    const mRate = (a.monthly_commission_pct||0)/100;
+    clients.forEach(c => {
+      if (c.setup_fee_paid && !c.setup_commission_paid) pendingComm += (c.setup_fee||0)*sRate;
+      if (c.setup_fee_paid && c.setup_commission_paid) paidComm += (c.setup_fee||0)*sRate;
+      if (c.monthly_paid && !c.monthly_commission_paid) pendingComm += (c.monthly_price||0)*mRate;
+      if (c.monthly_paid && c.monthly_commission_paid) paidComm += (c.monthly_price||0)*mRate;
+    });
+  });
+  document.getElementById('ov-pending-comm').textContent = '$' + pendingComm.toFixed(0);
+  document.getElementById('ov-paid-comm').textContent = '$' + paidComm.toFixed(0);
+
+  // Top ambassadors
+  const sorted = [...ambassadors].map(a => ({
+    ...a,
+    total: allAmbClients.filter(c=>c.ambassador_id===a.id).length,
+    active: allAmbClients.filter(c=>c.ambassador_id===a.id&&c.status==='Active').length
+  })).sort((a,b)=>b.total-a.total).slice(0,8);
+
+  document.getElementById('topAmbBody').innerHTML = sorted.length ? sorted.map(a=>`
+    <tr>
+      <td><strong>${a.name}</strong><br><span style="font-size:11px;color:var(--mt)">${a.email}</span></td>
+      <td><span style="background:rgba(100,206,251,.08);border:1px solid rgba(100,206,251,.2);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;color:var(--ac)">${a.referral_code||'—'}</span></td>
+      <td>${a.total}</td><td style="color:var(--ac3)">${a.active}</td>
+      <td>${a.setup_commission_pct||0}% / ${a.monthly_commission_pct||0}%</td>
+      <td><span class="badge badge-${a.status||'active'}">${a.status||'active'}</span></td>
+    </tr>`).join('') : '<tr><td colspan="6"><div class="empty"><div class="empty-icon">👥</div>No ambassadors yet</div></td></tr>';
+}
+
+// ========== AMBASSADOR TABLE ==========
+function renderAmbTable(data) {
+  const tbody = document.getElementById('ambTableBody');
+  if (!data.length) { tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">👥</div>No ambassadors found</div></td></tr>'; return; }
+  tbody.innerHTML = data.map(a => {
+    const tc = allAmbClients.filter(c=>c.ambassador_id===a.id).length;
+    const ac = allAmbClients.filter(c=>c.ambassador_id===a.id&&c.status==='Active').length;
+    return `<tr>
+      <td><span style="font-family:monospace;font-size:11px;color:var(--ac)">${a.ambassador_id||'—'}</span></td>
+      <td><strong>${a.name}</strong></td>
+      <td style="font-size:12px;color:var(--mt)">${a.email}</td>
+      <td style="font-size:12px;color:var(--mt)">${a.phone||'—'}</td>
+      <td><span style="background:rgba(100,206,251,.08);border:1px solid rgba(100,206,251,.2);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;color:var(--ac)">${a.referral_code||'—'}</span></td>
+      <td><span class="badge badge-${a.status||'active'}">${a.status||'active'}</span></td>
+      <td>${tc}</td><td style="color:var(--ac3)">${ac}</td>
+      <td>${a.setup_commission_pct||0}%</td><td>${a.monthly_commission_pct||0}%</td>
+      <td style="font-size:11px;color:var(--mt)">${new Date(a.created_at).toLocaleDateString()}</td>
+      <td style="white-space:nowrap">
+        <button class="action-btn" onclick="viewProfile('${a.id}')">View</button>
+        <button class="action-btn" onclick="editAmbassador('${a.id}')">Edit</button>
+        <button class="action-btn purple" onclick="loginAs('${a.id}','${a.name}')">Login As</button>
+        ${a.status==='active'?`<button class="action-btn" onclick="suspendAmb('${a.id}')">Suspend</button>`:`<button class="action-btn green" onclick="reactivateAmb('${a.id}')">Reactivate</button>`}
+        <button class="action-btn danger" onclick="deleteAmb('${a.id}','${a.name}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterAmbassadors() {
+  const q = document.getElementById('ambSearch').value.toLowerCase();
+  filteredAmb = q ? ambassadors.filter(a=>(a.name+a.email).toLowerCase().includes(q)) : [...ambassadors];
+  renderAmbTable(filteredAmb);
+}
+
+// ========== CREATE / EDIT AMBASSADOR ==========
+function openCreateModal(prefill) {
+  editingAmbId = null;
+  document.getElementById('createModalTitle').textContent = 'Create Ambassador';
+  document.getElementById('createSaveBtn').textContent = 'Create Ambassador';
+  ['cr_name','cr_email','cr_phone','cr_city','cr_state','cr_username','cr_password','cr_confirm'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('cr_country').value='USA';
+  document.getElementById('cr_status').value='active';
+  document.getElementById('cr_setup_pct').value='10';
+  document.getElementById('cr_monthly_pct').value='10';
+  document.getElementById('cr_bonus_pct').value='0';
+  if (prefill) {
+    document.getElementById('cr_name').value = prefill.name||'';
+    document.getElementById('cr_email').value = prefill.email||'';
+    document.getElementById('cr_phone').value = prefill.phone||'';
+  }
+  document.getElementById('createErr').style.display='none';
+  document.getElementById('createSuccess').style.display='none';
+  document.getElementById('createModal').classList.add('open');
+}
+
+function editAmbassador(id) {
+  const a = ambassadors.find(x=>x.id===id); if(!a) return;
+  editingAmbId = id;
+  document.getElementById('createModalTitle').textContent = 'Edit Ambassador';
+  document.getElementById('createSaveBtn').textContent = 'Save Changes';
+  document.getElementById('cr_name').value = a.name||'';
+  document.getElementById('cr_email').value = a.email||'';
+  document.getElementById('cr_phone').value = a.phone||'';
+  document.getElementById('cr_city').value = a.city||'';
+  document.getElementById('cr_state').value = a.state||'';
+  document.getElementById('cr_country').value = a.country||'USA';
+  document.getElementById('cr_username').value = a.username||'';
+  document.getElementById('cr_status').value = a.status||'active';
+  document.getElementById('cr_setup_pct').value = a.setup_commission_pct||10;
+  document.getElementById('cr_monthly_pct').value = a.monthly_commission_pct||10;
+  document.getElementById('cr_bonus_pct').value = a.bonus_commission_pct||0;
+  document.getElementById('cr_password').value='';
+  document.getElementById('cr_confirm').value='';
+  document.getElementById('createErr').style.display='none';
+  document.getElementById('createSuccess').style.display='none';
+  document.getElementById('createModal').classList.add('open');
+}
+
+function closeCreateModal() { document.getElementById('createModal').classList.remove('open'); }
+
+async function saveAmbassador() {
+  const name = document.getElementById('cr_name').value.trim();
+  const email = document.getElementById('cr_email').value.trim();
+  const phone = document.getElementById('cr_phone').value.trim();
+  const password = document.getElementById('cr_password').value;
+  const confirm = document.getElementById('cr_confirm').value;
+  const err = document.getElementById('createErr');
+  const succ = document.getElementById('createSuccess');
+
+  if (!name || !email) { err.textContent='Name and email are required'; err.style.display='block'; return; }
+  if (!editingAmbId && !password) { err.textContent='Password is required'; err.style.display='block'; return; }
+  if (password && password.length < 8) { err.textContent='Password must be at least 8 characters'; err.style.display='block'; return; }
+  if (password && password !== confirm) { err.textContent='Passwords do not match'; err.style.display='block'; return; }
+
+  const btn = document.getElementById('createSaveBtn');
+  btn.disabled=true; btn.textContent='Saving...';
+  err.style.display='none'; succ.style.display='none';
+
+  const payload = {
+    name, email, phone,
+    city: document.getElementById('cr_city').value.trim(),
+    state: document.getElementById('cr_state').value.trim(),
+    country: document.getElementById('cr_country').value.trim(),
+    username: document.getElementById('cr_username').value.trim()||null,
+    status: document.getElementById('cr_status').value,
+    setup_commission_pct: Number(document.getElementById('cr_setup_pct').value)||10,
+    monthly_commission_pct: Number(document.getElementById('cr_monthly_pct').value)||10,
+    bonus_commission_pct: Number(document.getElementById('cr_bonus_pct').value)||0
+  };
+  if (password) payload.password = password;
+
+  try {
+    const url = editingAmbId ? '/admin/api/ambassadors/'+editingAmbId : '/admin/api/ambassadors';
+    const method = editingAmbId ? 'PUT' : 'POST';
+    const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), credentials:'include'});
+    const d = await r.json();
+    if (d.ok) {
+      succ.textContent = editingAmbId ? 'Ambassador updated successfully.' : 'Ambassador account created successfully.';
+      succ.style.display='block';
+      await loadAll();
+      renderAmbTable(ambassadors);
+      filteredAmb = [...ambassadors];
+      setTimeout(closeCreateModal, 1500);
+      showToast(editingAmbId?'Ambassador updated':'Ambassador created successfully!','success');
+    } else { err.textContent=d.error||'Error saving'; err.style.display='block'; }
+  } catch { err.textContent='Connection error'; err.style.display='block'; }
+  btn.disabled=false; btn.textContent=editingAmbId?'Save Changes':'Create Ambassador';
+}
+
+async function suspendAmb(id) {
+  if (!confirm('Suspend this ambassador?')) return;
+  const r = await fetch('/admin/api/ambassadors/'+id, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'suspended'}),credentials:'include'});
+  const d = await r.json();
+  if (d.ok) { await loadAll(); renderAmbTable(filteredAmb); showToast('Ambassador suspended','success'); }
+  else showToast(d.error||'Error','error');
+}
+
+async function reactivateAmb(id) {
+  const r = await fetch('/admin/api/ambassadors/'+id, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'active'}),credentials:'include'});
+  const d = await r.json();
+  if (d.ok) { await loadAll(); renderAmbTable(filteredAmb); showToast('Ambassador reactivated','success'); }
+  else showToast(d.error||'Error','error');
+}
+
+async function deleteAmb(id, name) {
+  if (!confirm('Delete ambassador "'+name+'"? This will also delete all their clients.')) return;
+  const r = await fetch('/admin/api/ambassadors/'+id, {method:'DELETE',credentials:'include'});
+  const d = await r.json();
+  if (d.ok) { await loadAll(); renderAmbTable(filteredAmb); showToast('Ambassador deleted','success'); }
+  else showToast(d.error||'Error','error');
+}
+
+async function loginAs(id, name) {
+  if (!confirm('Login as ambassador "'+name+'"? This will open the ambassador dashboard.')) return;
+  const r = await fetch('/admin/api/ambassadors/'+id+'/login-as', {method:'POST',credentials:'include'});
+  const d = await r.json();
+  if (d.ok) { window.open('/ambassador','_blank'); showToast('Logged in as '+name,'success'); }
+  else showToast(d.error||'Error','error');
+}
+
+// ========== PROFILE ==========
+function viewProfile(id) {
+  const a = ambassadors.find(x=>x.id===id); if(!a) return;
+  const clients = allAmbClients.filter(c=>c.ambassador_id===id);
+  const active = clients.filter(c=>c.status==='Active').length;
+  const cancelled = clients.filter(c=>c.status==='Cancelled'||c.status==='Lost').length;
+  const conv = clients.length ? Math.round((active/clients.length)*100) : 0;
+  const sRate = (a.setup_commission_pct||0)/100;
+  const mRate = (a.monthly_commission_pct||0)/100;
+  let sPend=0,sPaid=0,mPend=0,mPaid=0;
+  clients.forEach(c=>{
+    if(c.setup_fee_paid){if(c.setup_commission_paid)sPaid+=(c.setup_fee||0)*sRate;else sPend+=(c.setup_fee||0)*sRate;}
+    if(c.monthly_paid&&c.status==='Active'){if(c.monthly_commission_paid)mPaid+=(c.monthly_price||0)*mRate;else mPend+=(c.monthly_price||0)*mRate;}
+  });
+  const totalRevenue = clients.filter(c=>c.status==='Active').reduce((s,c)=>s+(c.monthly_price||0),0);
+
+  document.getElementById('profileName').textContent = a.name;
+  document.getElementById('profileBody').innerHTML = `
+    <div class="profile-grid">
+      <div>
+        <div class="profile-card">
+          <h3>Profile</h3>
+          <div class="profile-row"><span class="profile-row-label">ID</span><span class="profile-row-val" style="color:var(--ac);font-family:monospace">${a.ambassador_id||'—'}</span></div>
+          <div class="profile-row"><span class="profile-row-label">Email</span><span class="profile-row-val" style="font-size:12px">${a.email}</span></div>
+          <div class="profile-row"><span class="profile-row-label">Phone</span><span class="profile-row-val">${a.phone||'—'}</span></div>
+          <div class="profile-row"><span class="profile-row-label">Referral Code</span><span class="profile-row-val" style="color:var(--ac2)">${a.referral_code||'—'}</span></div>
+          <div class="profile-row"><span class="profile-row-label">Status</span><span class="badge badge-${a.status||'active'}">${a.status||'active'}</span></div>
+          <div class="profile-row"><span class="profile-row-label">Setup Comm.</span><span class="profile-row-val">${a.setup_commission_pct||0}%</span></div>
+          <div class="profile-row"><span class="profile-row-label">Monthly Comm.</span><span class="profile-row-val">${a.monthly_commission_pct||0}%</span></div>
+          <div class="profile-row"><span class="profile-row-label">Joined</span><span class="profile-row-val">${new Date(a.created_at).toLocaleDateString()}</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="profile-card">
+          <h3>Performance</h3>
+          <div class="metric-grid">
+            <div class="metric"><div class="metric-val" style="color:var(--ac)">${clients.length}</div><div class="metric-label">Total Leads</div></div>
+            <div class="metric"><div class="metric-val" style="color:var(--ac3)">${active}</div><div class="metric-label">Active Clients</div></div>
+            <div class="metric"><div class="metric-val" style="color:var(--dg)">${cancelled}</div><div class="metric-label">Lost/Cancelled</div></div>
+            <div class="metric"><div class="metric-val" style="color:var(--ac2)">${conv}%</div><div class="metric-label">Conversion Rate</div></div>
+          </div>
+        </div>
+        <div class="profile-card">
+          <h3>Commissions</h3>
+          <div class="metric-grid">
+            <div class="metric"><div class="metric-val" style="color:var(--wn)">$${sPend.toFixed(0)}</div><div class="metric-label">Setup Pending</div></div>
+            <div class="metric"><div class="metric-val" style="color:var(--ac3)">$${sPaid.toFixed(0)}</div><div class="metric-label">Setup Paid</div></div>
+            <div class="metric"><div class="metric-val" style="color:var(--wn)">$${mPend.toFixed(0)}</div><div class="metric-label">Monthly Pending</div></div>
+            <div class="metric"><div class="metric-val" style="color:var(--ac3)">$${mPaid.toFixed(0)}</div><div class="metric-label">Monthly Paid</div></div>
+            <div class="metric" style="grid-column:1/-1"><div class="metric-val" style="color:var(--ac3)">$${totalRevenue.toFixed(0)}/mo</div><div class="metric-label">Monthly Revenue Generated</div></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('profileModal').classList.add('open');
+}
+
+function closeProfile() { document.getElementById('profileModal').classList.remove('open'); }
+
+// ========== APPLICATIONS ==========
+function renderApps() {
+  document.getElementById('appsCount').textContent = allApplications.length + ' total';
+  const pending = allApplications.filter(a=>a.status==='Pending Review').length;
+  if (pending) document.getElementById('appsCount').textContent += ` · ${pending} pending review`;
+  const statusColor = {'Pending Review':'badge-pending','Contacted':'badge-contacted','Approved':'badge-approved','Rejected':'badge-rejected'};
+  const tbody = document.getElementById('appsBody');
+  if (!allApplications.length) { tbody.innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">📋</div>No applications yet</div></td></tr>'; return; }
+  tbody.innerHTML = allApplications.map(a=>`
+    <tr>
+      <td><strong>${a.name}</strong></td>
+      <td style="font-size:12px;color:var(--mt)">${a.email}</td>
+      <td style="font-size:12px;color:var(--mt)">${a.phone||'—'}</td>
+      <td style="font-size:12px;color:var(--mt)">${a.city_state||'—'}</td>
+      <td>${a.has_sales_exp?'<span style="color:var(--ac3)">Yes</span>':'<span style="color:var(--mt)">No</span>'}</td>
+      <td><span class="badge ${statusColor[a.status]||'badge-pending'}">${a.status}</span></td>
+      <td style="font-size:11px;color:var(--mt)">${new Date(a.created_at).toLocaleDateString()}</td>
+      <td><button class="action-btn" onclick="openApp('${a.id}')">View</button></td>
+    </tr>`).join('');
+}
+
+function openApp(id) {
+  const a = allApplications.find(x=>x.id===id); if(!a) return;
+  currentAppId = id;
+  document.getElementById('appModalName').textContent = a.name + ' — Application';
+  document.getElementById('app_status').value = a.status||'Pending Review';
+  document.getElementById('app_notes').value = a.admin_notes||'';
+  document.getElementById('createFromAppBtn').style.display = a.status==='Approved'?'inline-block':'none';
+  document.getElementById('appModalBody').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;font-size:13px">
+      <div><span style="color:var(--mt)">Email: </span>${a.email}</div>
+      <div><span style="color:var(--mt)">Phone: </span>${a.phone||'—'}</div>
+      <div><span style="color:var(--mt)">Age: </span>${a.age||'—'}</div>
+      <div><span style="color:var(--mt)">City: </span>${a.city_state||'—'}</div>
+      <div><span style="color:var(--mt)">Sales exp.: </span>${a.has_sales_exp?'Yes':'No'}</div>
+      <div><span style="color:var(--mt)">Knows owners: </span>${a.knows_owners?'Yes':'No'}</div>
+    </div>
+    ${a.reason?`<div style="background:var(--s);border:1px solid var(--b);border-radius:10px;padding:12px;font-size:13px;color:var(--mt);margin-bottom:8px;line-height:1.5"><strong style="color:var(--tx)">Why:</strong> ${a.reason}</div>`:''}
+    ${a.strategy?`<div style="background:var(--s);border:1px solid var(--b);border-radius:10px;padding:12px;font-size:13px;color:var(--mt);line-height:1.5"><strong style="color:var(--tx)">Strategy:</strong> ${a.strategy}</div>`:''}
+    ${a.social_link?`<div style="margin-top:8px;font-size:13px"><span style="color:var(--mt)">Social: </span><a href="${a.social_link}" target="_blank" style="color:var(--ac)">${a.social_link}</a></div>`:''}`;
+  document.getElementById('appModal').classList.add('open');
+}
+
+function closeAppModal() { document.getElementById('appModal').classList.remove('open'); }
+
+async function saveApp() {
+  const r = await fetch('/admin/api/ambassador-applications/'+currentAppId, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body:JSON.stringify({status:document.getElementById('app_status').value, admin_notes:document.getElementById('app_notes').value.trim()})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    closeAppModal(); await loadAll(); renderApps(); showToast('Application updated','success');
+    // Update create button visibility
+    if (d.application?.status==='Approved') document.getElementById('createFromAppBtn').style.display='inline-block';
+  } else showToast(d.error||'Error','error');
+}
+
+function createFromApp() {
+  const a = allApplications.find(x=>x.id===currentAppId); if(!a) return;
+  closeAppModal();
+  document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.remove('active');if(i===1)t.classList.add('active')});
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-ambassadors').classList.add('active');
+  renderAmbTable(ambassadors);
+  setTimeout(()=>openCreateModal({name:a.name,email:a.email,phone:a.phone}),100);
+}
+
+// ========== COMMISSIONS ==========
+function renderCommissions() {
+  let sPend=0,sPaid=0,mPend=0,mPaid=0;
+  ambassadors.forEach(a=>{
+    const sR=(a.setup_commission_pct||0)/100, mR=(a.monthly_commission_pct||0)/100;
+    allAmbClients.filter(c=>c.ambassador_id===a.id).forEach(c=>{
+      if(c.setup_fee_paid){if(c.setup_commission_paid)sPaid+=(c.setup_fee||0)*sR;else sPend+=(c.setup_fee||0)*sR;}
+      if(c.monthly_paid){if(c.monthly_commission_paid)mPaid+=(c.monthly_price||0)*mR;else mPend+=(c.monthly_price||0)*mR;}
+    });
+  });
+  document.getElementById('comm-pending').textContent='$'+( sPend+mPend).toFixed(0);
+  document.getElementById('comm-paid').textContent='$'+(sPaid+mPaid).toFixed(0);
+  document.getElementById('comm-setup-pend').textContent='$'+sPend.toFixed(0);
+  document.getElementById('comm-monthly-pend').textContent='$'+mPend.toFixed(0);
+
+  const tbody = document.getElementById('commBody');
+  const clients = allAmbClients.filter(c=>c.setup_fee>0||c.monthly_price>0);
+  if (!clients.length) { tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">💰</div>No commission data yet</div></td></tr>'; return; }
+  tbody.innerHTML = clients.map(c=>{
+    const amb = ambassadors.find(a=>a.id===c.ambassador_id);
+    const sR=((amb?.setup_commission_pct||0)/100), mR=((amb?.monthly_commission_pct||0)/100);
+    const sComm=(c.setup_fee||0)*sR, mComm=(c.monthly_price||0)*mR;
+    return `<tr>
+      <td><strong>${c.business_name}</strong></td>
+      <td style="font-size:12px;color:var(--mt)">${amb?.name||'—'}</td>
+      <td><span class="badge badge-${c.status==='Active'?'active':c.status==='Cancelled'?'inactive':'pending'}">${c.status}</span></td>
+      <td>$${c.setup_fee||0}</td>
+      <td>${c.setup_fee_paid?'<span style="color:var(--ac3)">✓</span>':'<span style="color:var(--mt)">—</span>'}</td>
+      <td style="color:var(--ac)">$${sComm.toFixed(2)}</td>
+      <td>${c.setup_commission_paid?'<span style="color:var(--ac3)">✓ Paid</span>':'<span style="color:var(--wn)">Pending</span>'}</td>
+      <td>$${c.monthly_price||0}/mo</td>
+      <td>${c.monthly_paid?'<span style="color:var(--ac3)">✓</span>':'<span style="color:var(--mt)">—</span>'}</td>
+      <td style="color:var(--ac)">$${mComm.toFixed(2)}/mo</td>
+      <td>${c.monthly_commission_paid?'<span style="color:var(--ac3)">✓ Paid</span>':'<span style="color:var(--wn)">Pending</span>'}</td>
+      <td><button class="action-btn" onclick="editCommClient('${c.id}')">Edit</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function editCommClient(id) {
+  const c = allAmbClients.find(x=>x.id===id); if(!c) return;
+  const setup_paid = confirm('Mark setup fee as paid? (OK=Yes, Cancel=No)');
+  const setup_comm_paid = confirm('Mark setup COMMISSION as paid to ambassador? (OK=Yes, Cancel=No)');
+  const monthly_paid = confirm('Mark monthly as paid? (OK=Yes, Cancel=No)');
+  const monthly_comm_paid = confirm('Mark monthly COMMISSION as paid to ambassador? (OK=Yes, Cancel=No)');
+  const r = await fetch('/admin/api/ambassador-clients/'+id, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body:JSON.stringify({setup_fee_paid:setup_paid,setup_commission_paid:setup_comm_paid,monthly_paid,monthly_commission_paid:monthly_comm_paid})
+  });
+  const d = await r.json();
+  if (d.ok) { await loadAll(); renderCommissions(); showToast('Commission updated','success'); }
+  else showToast(d.error||'Error','error');
+}
+
+// ========== ANALYTICS ==========
+function renderAnalytics() {
+  const total = ambassadors.length;
+  const totalClients = allAmbClients.length;
+  const activeClients = allAmbClients.filter(c=>c.status==='Active').length;
+  const convRate = totalClients ? Math.round((activeClients/totalClients)*100) : 0;
+  const mrr = allAmbClients.filter(c=>c.status==='Active').reduce((s,c)=>s+(c.monthly_price||0),0);
+
+  document.getElementById('analyticsStats').innerHTML = `
+    <div class="stat"><div class="stat-label">Ambassadors</div><div class="stat-val" style="color:var(--ac)">${total}</div></div>
+    <div class="stat"><div class="stat-label">Total Leads</div><div class="stat-val" style="color:var(--ac2)">${totalClients}</div></div>
+    <div class="stat"><div class="stat-label">Active Clients</div><div class="stat-val" style="color:var(--ac3)">${activeClients}</div></div>
+    <div class="stat"><div class="stat-label">Conversion Rate</div><div class="stat-val" style="color:var(--wn)">${convRate}%</div></div>
+    <div class="stat"><div class="stat-label">Monthly Revenue</div><div class="stat-val" style="color:var(--ac3)">$${mrr}</div></div>`;
+
+  // Status breakdown
+  const statuses = ['Lead','Demo Scheduled','Pending Setup','Active','Cancelled','Lost'];
+  document.getElementById('statusBreakdown').innerHTML = statuses.map(s=>{
+    const count = allAmbClients.filter(c=>c.status===s).length;
+    const pct = totalClients ? Math.round((count/totalClients)*100) : 0;
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="color:var(--mt)">${s}</span><span>${count} (${pct}%)</span></div>
+      <div style="height:6px;background:rgba(255,255,255,.06);border-radius:3px"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:3px;transition:width .5s"></div></div>
+    </div>`;
+  }).join('');
+
+  // Top performers
+  const performers = ambassadors.map(a=>({
+    ...a,
+    active: allAmbClients.filter(c=>c.ambassador_id===a.id&&c.status==='Active').length,
+    total: allAmbClients.filter(c=>c.ambassador_id===a.id).length
+  })).sort((a,b)=>b.active-a.active).slice(0,6);
+
+  document.getElementById('topPerformers').innerHTML = performers.length ? performers.map((a,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--b);font-size:13px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:22px;height:22px;border-radius:50%;background:${i<3?'linear-gradient(135deg,var(--ac2),var(--ac))':'var(--s2)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${i<3?'#04040a':'var(--mt)';}">${i+1}</span>
+        <div><div style="font-weight:600">${a.name}</div><div style="font-size:11px;color:var(--mt)">${a.referral_code||'—'}</div></div>
+      </div>
+      <div style="text-align:right"><div style="color:var(--ac3);font-weight:700">${a.active} active</div><div style="font-size:11px;color:var(--mt)">${a.total} total</div></div>
+    </div>`).join('') : '<div class="empty"><div class="empty-icon">📈</div>No data yet</div>';
+}
+
+// ========== UTILS ==========
+function togglePw(id, btn) {
+  const inp = document.getElementById(id);
+  inp.type = inp.type==='password' ? 'text' : 'password';
+  btn.textContent = inp.type==='password' ? '👁' : '🙈';
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+type;
+  setTimeout(()=>t.className='toast',3000);
+}
+
+// Close modals on overlay click
+['createModal','appModal','profileModal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click', e=>{if(e.target===e.currentTarget)e.target.classList.remove('open');});
+});
+
+init();
+</script>
+</body>
+</html>

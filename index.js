@@ -8,7 +8,7 @@ import nodemailer from "nodemailer";
 import { DateTime } from "luxon";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcrypt";
-import { findAdminByEmail, findClientByEmail, upsertClientUser } from "./auth/supabase.js";
+import { findAdminByEmail, findClientByEmail } from "./auth/supabase.js";
 import { validatePassword } from "./auth/users.js";
 import Groq from "groq-sdk";
 import crypto from "crypto";
@@ -23,6 +23,30 @@ import {
   setClientCookie,
   clearClientCookie
 } from "./auth/jwt.js";
+
+// ===== Ambassador auth helpers =====
+import jwt from "jsonwebtoken";
+const AMB_COOKIE = "aidash_amb";
+function signAmbassador(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET || "changeme", { expiresIn: "7d" });
+}
+function setAmbassadorCookie(res, token) {
+  res.cookie(AMB_COOKIE, token, { httpOnly: true, secure: process.env.COOKIE_SECURE === "1", sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000 });
+}
+function clearAmbassadorCookie(res) { res.clearCookie(AMB_COOKIE); }
+async function verifyAmbassador(req, res, next) {
+  const token = req.cookies?.[AMB_COOKIE];
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET || "changeme");
+    const amb = await findAmbassadorById(payload.id);
+    if (!amb || amb.status !== "active") return res.status(401).json({ error: "Unauthorized" });
+    req.ambassador = amb;
+    next();
+  } catch { res.status(401).json({ error: "Unauthorized" }); }
+}
+// ===================================
+
 
 
 
@@ -71,12 +95,6 @@ async function deletePending(token) {
 const app = express();
 
 app.use(cookieParser());
-
-// OTP store: email -> { code, expires, slug }
-const otpStore = new Map();
-function generateOtp() { return String(Math.floor(100000 + Math.random() * 900000)); }
-function cleanExpiredOtps() { const now = Date.now(); for (const [k,v] of otpStore) if (v.expires < now) otpStore.delete(k); }
-setInterval(cleanExpiredOtps, 60_000);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -294,10 +312,6 @@ app.get("/dashboard", verifyAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, "dashboard", "index.html"));
 });
 
-app.get("/admin/:slug", verifyAdmin, (req, res) => {
-  res.sendFile(path.join(ADMIN_DIR, "index.html"));
-});
-
 
 // ===== CLIENT =====
 // ===== CLIENT =====
@@ -327,7 +341,7 @@ app.post(
   "/client/auth/login",
   express.json(),
   async (req, res) => {
-    const { email, password, remember } = req.body || {};
+    const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ ok:false, error:"Missing fields" });
 
     const user = await findClientByEmail(String(email).trim());
@@ -336,77 +350,17 @@ app.post(
     const ok = await validatePassword(password, user.password_hash);
     if (!ok) return res.status(401).json({ ok:false, error:"Invalid credentials" });
 
-    // Check if first-time login needs OTP
-    try {
-      const cfg = await loadTenant(user.tenant_slug);
-      if (cfg.client_verified === false) {
-        // Generate and send OTP
-        const code = generateOtp();
-        otpStore.set(user.email, { code, expires: Date.now() + 10 * 60 * 1000, slug: user.tenant_slug, remember: !!remember });
-        const { sendEmail } = await import("./mailer.js");
-        await sendEmail({
-          to: user.email,
-          subject: "VAI.ia — Tu código de verificación",
-          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#04040a;color:#f0eeff;border-radius:16px">
-            <h2 style="color:#64CEFB;margin-bottom:8px">VAI<span style="color:#a78bfa">.ia</span></h2>
-            <p style="color:#a0a0c0;margin-bottom:24px">Tu código de verificación para el primer acceso:</p>
-            <div style="font-size:40px;font-weight:700;letter-spacing:12px;text-align:center;padding:24px;background:rgba(100,206,251,.08);border:1px solid rgba(100,206,251,.2);border-radius:12px;color:#64CEFB">${code}</div>
-            <p style="color:#a0a0c0;margin-top:20px;font-size:13px">Este código expira en <strong>10 minutos</strong>. No lo compartas con nadie.</p>
-          </div>`
-        });
-        return res.json({ ok:false, needsOtp:true, email: user.email });
-      }
-    } catch(e) {
-      console.error("[LOGIN] OTP check error:", e.message);
-    }
-
     const token = signClient({
-      id: user.id, email: user.email, role: "client", slug: user.tenant_slug,
-    }, !!remember);
+      id: user.id,
+      email: user.email,
+      role: "client",
+      slug: user.tenant_slug,
+    });
 
-    setClientCookie(res, token, !!remember);
+    setClientCookie(res, token);
     return res.json({ ok:true, redirectTo:"/client" });
   }
 );
-
-// OTP verification route
-app.post("/client/auth/verify-otp", express.json(), async (req, res) => {
-  const { email, code } = req.body || {};
-  if (!email || !code) return res.status(400).json({ ok:false, error:"Missing fields" });
-
-  const entry = otpStore.get(email.toLowerCase().trim());
-  if (!entry) return res.status(400).json({ ok:false, error:"Code expired or not found" });
-  if (Date.now() > entry.expires) {
-    otpStore.delete(email);
-    return res.status(400).json({ ok:false, error:"Code expired" });
-  }
-  if (String(entry.code) !== String(code).trim()) {
-    return res.status(400).json({ ok:false, error:"Invalid code" });
-  }
-
-  // Mark as verified in tenant config
-  try {
-    const tenantFile = path.join(TENANTS_DIR, entry.slug + ".json");
-    const cfg = JSON.parse(await fs.readFile(tenantFile, "utf8"));
-    cfg.client_verified = true;
-    await fs.writeFile(tenantFile, JSON.stringify(cfg, null, 2), "utf8");
-    tenantCache.delete(entry.slug);
-  } catch(e) {
-    console.error("[OTP] update verified error:", e.message);
-  }
-
-  otpStore.delete(email);
-
-  const user = await findClientByEmail(email);
-  if (!user) return res.status(400).json({ ok:false, error:"User not found" });
-
-  const token = signClient({
-    id: user.id, email: user.email, role: "client", slug: user.tenant_slug,
-  }, entry.remember);
-
-  setClientCookie(res, token, entry.remember);
-  return res.json({ ok:true, redirectTo:"/client" });
-});
 
 
 // LOGOUT
@@ -672,57 +626,19 @@ app.get("/admin/api/tenant/:slug", verifyAdmin, async (req,res)=>{
 
 app.post("/admin/api/tenant/save", verifyAdmin, async (req,res)=>{
   try{
-    const { slug, config, client_email, client_password } = req.body || {};
+    const { slug, config } = req.body || {};
     if(!slug || !config) {
       return res.status(400).json({ error:"missing data" });
-    }
-
-    // Si viene email+password, crear/actualizar usuario en Supabase
-    if (client_email && client_password) {
-      const { hashPassword } = await import("./auth/users.js");
-      const hash = await hashPassword(client_password);
-      await upsertClientUser(slug, client_email, hash);
-      // Marcar que requiere verificación en primer login
-      config.client_verified = false;
     }
 
     const file = path.join(TENANTS_DIR, `${slug}.json`);
     await fs.writeFile(file, JSON.stringify(config,null,2), "utf8");
 
-    tenantCache.delete(slug);
-    if (typeof sessions !== "undefined") {
-      for (const [key] of sessions) {
-        if (key.startsWith(slug + ":") || key === slug) sessions.delete(key);
-      }
-    }
+    tenantCache.delete(slug); // refrescar cache
     res.json({ ok:true });
   }catch(e){
     console.error("[ADMIN] save tenant error:", e);
     res.status(500).json({ error:"Cannot save tenant" });
-  }
-});
-
-// DELETE /admin/api/tenant/:slug
-app.delete("/admin/api/tenant/:slug", verifyAdmin, async (req, res) => {
-  try {
-    const slug = String(req.params.slug).toLowerCase().trim();
-    if (!slug || slug === "demo") {
-      return res.status(400).json({ error: "Cannot delete this tenant" });
-    }
-    const tenantFile = path.join(TENANTS_DIR, slug + ".json");
-    await fs.unlink(tenantFile);
-    tenantCache.delete(slug);
-    if (typeof sessions !== "undefined") {
-      for (const [key] of sessions) {
-        if (key.startsWith(slug + ":") || key === slug) sessions.delete(key);
-      }
-    }
-    console.log("[ADMIN] Tenant deleted: " + slug);
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("[ADMIN] delete tenant error:", e.message);
-    if (e.code === "ENOENT") return res.status(404).json({ error: "Tenant not found" });
-    res.status(500).json({ error: "Cannot delete tenant" });
   }
 });
 
@@ -1283,6 +1199,199 @@ function renderReminderEmail(
 }
 
 // --- health / util routes ---
+
+// Ambassador Program public page
+
+const AMBASSADOR_DIR = path.join(__dirname, "ambassador");
+
+// ========== AMBASSADOR PORTAL ==========
+app.use("/ambassador", express.static(AMBASSADOR_DIR, { index: false }));
+
+app.get("/ambassador/login", (req, res) => {
+  res.sendFile("login.html", { root: AMBASSADOR_DIR }, (err) => {
+    if (err) { console.error("[AMB] login error:", err.message, AMBASSADOR_DIR); res.status(500).send("Error"); }
+  });
+});
+
+app.get("/ambassador", async (req, res) => {
+  const token = req.cookies?.[AMB_COOKIE];
+  if (!token) return res.redirect("/ambassador/login");
+  try {
+    jwt.verify(token, process.env.JWT_SECRET || "changeme");
+    res.sendFile("index.html", { root: AMBASSADOR_DIR }, (err) => {
+      if (err) { console.error("[AMB] dash error:", err.message); res.redirect("/ambassador/login"); }
+    });
+  } catch { res.redirect("/ambassador/login"); }
+});
+
+app.post("/ambassador/auth/login", express.json(), async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ ok: false, error: "Missing fields" });
+  const amb = await findAmbassadorByEmail(String(email).trim());
+  if (!amb || amb.status !== "active") return res.status(401).json({ ok: false, error: "Invalid credentials" });
+  const ok = await validatePassword(password, amb.password_hash);
+  if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+  setAmbassadorCookie(res, signAmbassador({ id: amb.id, email: amb.email, role: "ambassador" }));
+  res.json({ ok: true });
+});
+
+app.post("/ambassador/auth/logout", (req, res) => { clearAmbassadorCookie(res); res.json({ ok: true }); });
+
+app.get("/ambassador/api/me", verifyAmbassador, (req, res) => {
+  const { password_hash, ...safe } = req.ambassador;
+  res.json(safe);
+});
+
+app.get("/ambassador/api/clients", verifyAmbassador, async (req, res) => {
+  try { res.json(await getAmbassadorClients(req.ambassador.id)); } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/ambassador/api/clients", express.json(), verifyAmbassador, async (req, res) => {
+  try {
+    const { business_name, contact_name, phone, email, business_type, notes, requested_plan, estimated_monthly, status } = req.body || {};
+    if (!business_name) return res.status(400).json({ ok: false, error: "Business name required" });
+    const allowed = ["Lead", "Demo Scheduled", "Pending Setup"];
+    const c = await createAmbassadorClient({ ambassador_id: req.ambassador.id, business_name, contact_name, phone, email, business_type, notes, requested_plan, estimated_monthly: Number(estimated_monthly) || 0, status: allowed.includes(status) ? status : "Lead" });
+    res.json({ ok: true, client: c });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.put("/ambassador/api/clients/:id", express.json(), verifyAmbassador, async (req, res) => {
+  try {
+    const { business_name, contact_name, phone, email, business_type, notes, requested_plan, estimated_monthly, status } = req.body || {};
+    const allowed = ["Lead", "Demo Scheduled", "Pending Setup"];
+    const c = await updateAmbassadorClient(req.params.id, { business_name, contact_name, phone, email, business_type, notes, requested_plan, estimated_monthly: Number(estimated_monthly) || 0, status: allowed.includes(status) ? status : "Lead" });
+    res.json({ ok: true, client: c });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+
+// Ambassador Management page
+app.get("/admin/ambassadors", verifyAdmin, (req, res) => {
+  res.sendFile(path.join(ADMIN_DIR, "ambassadors.html"));
+});
+
+
+// Ambassador Management page
+app.get("/admin/ambassadors", verifyAdmin, (req, res) => {
+  res.sendFile(path.join(ADMIN_DIR, "ambassadors.html"));
+});
+
+// ===== ADMIN AMBASSADOR MANAGEMENT =====
+app.get("/admin/api/ambassadors", verifyAdmin, async (req, res) => {
+  try {
+    const ambs = await getAllAmbassadors();
+    const all = await getAmbassadorClients(null);
+    res.json(ambs.map(a => ({
+      ...a,
+      total_clients: all.filter(c => c.ambassador_id === a.id).length,
+      active_clients: all.filter(c => c.ambassador_id === a.id && c.status === "Active").length
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/admin/api/ambassadors", express.json(), verifyAdmin, async (req, res) => {
+  try {
+    const { name, email, password, phone, city, state, country, username, setup_commission_pct, monthly_commission_pct, bonus_commission_pct, status } = req.body || {};
+    if (!name || !email || !password) return res.status(400).json({ ok: false, error: "Name, email and password required" });
+    const { hashPassword } = await import("./auth/users.js");
+    const password_hash = await hashPassword(password);
+    // Generate unique ambassador_id
+    const existing = await getAllAmbassadors();
+    const nextNum = String(existing.length + 1).padStart(4, "0");
+    const ambassador_id = "AMB-" + nextNum;
+    // Generate unique referral code
+    const base = name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5).toUpperCase();
+    const rand = Math.random().toString(36).slice(2, 5).toUpperCase();
+    const referral_code = base + rand;
+    // Auto-generate username if empty
+    const uname = username || name.toLowerCase().replace(/\s+/g, ".").replace(/[^a-z0-9.]/g, "");
+    const amb = await createAmbassador({
+      name, email: email.toLowerCase().trim(), password_hash, referral_code, ambassador_id,
+      phone, city, state, country: country || "USA", username: uname,
+      setup_commission_pct: Number(setup_commission_pct) || 10,
+      monthly_commission_pct: Number(monthly_commission_pct) || 10,
+      bonus_commission_pct: Number(bonus_commission_pct) || 0,
+      status: status || "active"
+    });
+    res.json({ ok: true, ambassador: amb });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.put("/admin/api/ambassadors/:id", express.json(), verifyAdmin, async (req, res) => {
+  try {
+    const { name, email, password, phone, city, state, country, username, setup_commission_pct, monthly_commission_pct, bonus_commission_pct, status } = req.body || {};
+    const fields = { name, email: email?.toLowerCase().trim(), phone, city, state, country, username, setup_commission_pct: Number(setup_commission_pct) || 10, monthly_commission_pct: Number(monthly_commission_pct) || 10, bonus_commission_pct: Number(bonus_commission_pct) || 0, status };
+    if (password) { const { hashPassword } = await import("./auth/users.js"); fields.password_hash = await hashPassword(password); }
+    res.json({ ok: true, ambassador: await updateAmbassador(req.params.id, fields) });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete("/admin/api/ambassadors/:id", verifyAdmin, async (req, res) => {
+  try { await deleteAmbassador(req.params.id); res.json({ ok: true }); }
+  catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Admin login-as ambassador
+app.post("/admin/api/ambassadors/:id/login-as", verifyAdmin, async (req, res) => {
+  try {
+    const amb = await findAmbassadorById(req.params.id);
+    if (!amb) return res.status(404).json({ ok: false, error: "Ambassador not found" });
+    const token = signAmbassador({ id: amb.id, email: amb.email, role: "ambassador" });
+    setAmbassadorCookie(res, token);
+    console.log("[ADMIN] Login-as ambassador:", amb.name, "by admin:", req.admin?.email);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/admin/api/ambassador-clients", verifyAdmin, async (req, res) => {
+  try { res.json(await getAmbassadorClients(null)); }
+  catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put("/admin/api/ambassador-clients/:id", express.json(), verifyAdmin, async (req, res) => {
+  try {
+    const allowed = ["business_name","contact_name","phone","email","business_type","notes","requested_plan","estimated_monthly","status","setup_fee","setup_fee_paid","monthly_price","monthly_paid","setup_commission_paid","monthly_commission_paid","slug","twilio_number"];
+    const fields = {};
+    for (const k of allowed) if (req.body[k] !== undefined) fields[k] = req.body[k];
+    res.json({ ok: true, client: await updateAmbassadorClient(req.params.id, fields) });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/ambassador-program", (req, res) => {
+  res.sendFile("ambassador.html", { root: PUBLIC_DIR }, (err) => {
+    if (err) res.status(500).send("Error loading page");
+  });
+});
+
+// Public application submission
+app.post("/api/ambassador-apply", express.json(), async (req, res) => {
+  try {
+    const { name, phone, email, age, city_state, has_sales_exp, reason, strategy, knows_owners, social_link, notes } = req.body || {};
+    if (!name || !email) return res.status(400).json({ ok: false, error: "Name and email are required" });
+    const app = await createAmbassadorApplication({ name, phone, email, age, city_state, has_sales_exp: !!has_sales_exp, reason, strategy, knows_owners: !!knows_owners, social_link, notes });
+    res.json({ ok: true, id: app.id });
+  } catch(e) {
+    console.error("[APPLY]", e.message);
+    res.status(500).json({ ok: false, error: "Could not save application" });
+  }
+});
+
+// Admin - Applications
+app.get("/admin/api/ambassador-applications", verifyAdmin, async (req, res) => {
+  try { res.json(await getAllAmbassadorApplications()); }
+  catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put("/admin/api/ambassador-applications/:id", express.json(), verifyAdmin, async (req, res) => {
+  try {
+    const allowed = ["status", "admin_notes"];
+    const fields = {};
+    for (const k of allowed) if (req.body[k] !== undefined) fields[k] = req.body[k];
+    res.json({ ok: true, application: await updateAmbassadorApplication(req.params.id, fields) });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.get("/ping", (req, res) => res.type("text").send("pong"));
 
 app.get("/env-check", async (req, res) => {
@@ -1551,11 +1660,12 @@ async function runChat({ prompt, slug, sessionId }) {
   const safeSlug = (slug || "demo").toString().toLowerCase().trim();
 
   // --- anti-repeat / anti-loop guard ---
-sess._repeat = sess._repeat || { last: "", count: 0 };
+  const sess = getSession(sessionId);
+  sess._repeat = sess._repeat || { last: "", count: 0 };
 
-const cleanPrompt = (prompt || "").trim().toLowerCase();
-if (cleanPrompt && cleanPrompt === sess._repeat.last) sess._repeat.count += 1;
-else { sess._repeat.last = cleanPrompt; sess._repeat.count = 0; }
+  const cleanPrompt = (prompt || "").trim().toLowerCase();
+  if (cleanPrompt && cleanPrompt === sess._repeat.last) sess._repeat.count += 1;
+  else { sess._repeat.last = cleanPrompt; sess._repeat.count = 0; }
 
 function isPriceQuestion(t="") {
   const s = t.toLowerCase();
@@ -2477,6 +2587,71 @@ app.listen(PORT, () => {
 
 
 
+// ============================================================
+// SMS TENANT ROUTER
+// ============================================================
+async function getTenantByPhone(toNumber) {
+  try {
+    const files = await fs.readdir(TENANTS_DIR);
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      try {
+        const raw = await fs.readFile(path.join(TENANTS_DIR, file), 'utf8');
+        const cfg = JSON.parse(raw);
+        const num = (cfg.twilio_number || cfg.vars?.twilio_number || '').replace(/\D/g,'');
+        if (num && num === toNumber.replace(/\D/g,'')) return file.replace('.json','');
+      } catch {}
+    }
+  } catch(e) { console.error('[SMS ROUTER]', e.message); }
+  return 'demo';
+}
 
+app.post("/webhook/sms", async (req, res) => {
+  try {
+    const from = req.body.From || '';
+    const to   = req.body.To   || '';
+    const body = (req.body.Body || '').trim();
+    if (!from || !body) return res.sendStatus(400);
+    console.log(`[SMS] IN from=${from} to=${to}: ${body}`);
+    const slug = await getTenantByPhone(to);
+    console.log(`[SMS] Tenant: ${slug}`);
+    const sessionId = `sms_${slug}_${from}`;
+    const out = await runChat({ prompt: body, slug, sessionId });
+    const reply = out?.reply || 'Ok';
+    await logSms(slug, from, to, body, reply);
+    if (twilioClient) {
+      await twilioClient.messages.create({ from: to, to: from, body: reply });
+    }
+    res.sendStatus(200);
+  } catch(e) {
+    console.error('[WEBHOOK/SMS]', e.message);
+    res.sendStatus(200);
+  }
+});
 
-
+// ============================================================
+// LANDING CHAT
+// ============================================================
+app.post("/api/landing-chat", async (req, res) => {
+  try {
+    const { prompt, history = [], lang = 'en' } = req.body || {};
+    if (!prompt) return res.json({ reply: 'How can I help you?' });
+    const systemPrompt = lang === 'es'
+      ? 'Eres VAI.ia, un asistente virtual inteligente para negocios. Automatizas la atencion al cliente con IA. Ofreces agendamiento automatico, respuestas 24/7, integracion con WhatsApp, SMS, Instagram, Facebook, email y llamadas. Email: vai.virtualassitant@gmail.com. Responde en espanol, amable y conciso. Maximo 3 oraciones.'
+      : 'You are VAI.ia, an intelligent virtual assistant for businesses. You automate customer service with AI. You offer automatic appointment booking, 24/7 responses, WhatsApp, SMS, Instagram, Facebook, email and call integration. Email: vai.virtualassitant@gmail.com. Reply in English, friendly and concise. Max 3 sentences.';
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history.slice(-10),
+      { role: 'user', content: prompt }
+    ];
+    const completion = await groq.chat.completions.create({
+      model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+      messages, temperature: 0.5, max_tokens: 200,
+    });
+    const reply = completion.choices?.[0]?.message?.content?.trim() || 'How can I help you?';
+    return res.json({ reply });
+  } catch(e) {
+    console.error('[LANDING-CHAT]', e.message);
+    return res.json({ reply: 'Sorry, connection error. Email us at vai.virtualassitant@gmail.com' });
+  }
+});

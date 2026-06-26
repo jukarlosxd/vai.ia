@@ -7,9 +7,25 @@ import "dotenv/config";
 import nodemailer from "nodemailer";
 import { DateTime } from "luxon";
 import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
 import bcrypt from "bcrypt";
-import { findAdminByEmail, findClientByEmail } from "./auth/supabase.js";
+import { findAdminByEmail, findClientByEmail, upsertClientUser } from "./auth/supabase.js";
+import supabase from "./auth/supabase.js";
 import { validatePassword } from "./auth/users.js";
+import {
+  findAmbassadorByEmail,
+  findAmbassadorById,
+  getAllAmbassadors,
+  createAmbassador,
+  updateAmbassador,
+  deleteAmbassador,
+  getAmbassadorClients,
+  createAmbassadorClient,
+  updateAmbassadorClient,
+  getAllAmbassadorApplications,
+  createAmbassadorApplication,
+  updateAmbassadorApplication,
+} from "./auth/ambassadors.js";
 import Groq from "groq-sdk";
 import crypto from "crypto";
 import twilio from "twilio";
@@ -28,7 +44,7 @@ import {
 import jwt from "jsonwebtoken";
 const AMB_COOKIE = "aidash_amb";
 function signAmbassador(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET || "changeme", { expiresIn: "7d" });
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 }
 function setAmbassadorCookie(res, token) {
   res.cookie(AMB_COOKIE, token, { httpOnly: true, secure: process.env.COOKIE_SECURE === "1", sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -38,7 +54,7 @@ async function verifyAmbassador(req, res, next) {
   const token = req.cookies?.[AMB_COOKIE];
   if (!token) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || "changeme");
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
     const amb = await findAmbassadorById(payload.id);
     if (!amb || amb.status !== "active") return res.status(401).json({ error: "Unauthorized" });
     req.ambassador = amb;
@@ -60,6 +76,33 @@ const TENANTS_DIR  = path.join(__dirname, "tenants");
 const APPOINTMENTS_DIR = path.join(__dirname, "appointments");
 
 const PENDING_DIR = path.join(__dirname, "pending");
+
+// ─── SLUG VALIDATION (STEP 2) ─────────────────────────────────────────────────
+// All user-supplied slugs MUST pass this before being used in any file path.
+// Allows: lowercase letters, digits, hyphens. Max 60 chars.
+// Rejects: path traversal sequences, dots, slashes, null bytes, and anything
+// outside the allowlist — even after toLowerCase/trim.
+// Returns the safe slug string on success, or null on failure.
+function validateSlug(raw) {
+  if (!raw) return null;
+  const s = String(raw).toLowerCase().trim();
+  // Allowlist: ^[a-z0-9-]{1,60}$
+  if (!/^[a-z0-9-]{1,60}$/.test(s)) return null;
+  return s;
+}
+
+// ─── PATH CONFINEMENT CHECK ────────────────────────────────────────────────────
+// Secondary defence: verify the resolved path stays inside the expected base dir.
+// Called inside every function that builds a file path from a slug.
+function assertPathSafe(resolvedPath, baseDir) {
+  const normalBase = path.resolve(baseDir) + path.sep;
+  const normalPath = path.resolve(resolvedPath);
+  if (!normalPath.startsWith(normalBase)) {
+    throw new Error(`Path traversal attempt blocked: ${resolvedPath}`);
+  }
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // --- Twilio ---
@@ -68,14 +111,236 @@ const twilioClient =
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
     : null;
 
+// ─── TWILIO SIGNATURE VERIFICATION ──────────────────────────────────────────────
+// Validates the X-Twilio-Signature header against TWILIO_AUTH_TOKEN using
+// Twilio's official validateRequest() method. This proves the request actually
+// came from Twilio and was not forged by a third party.
+//
+// The signature is computed over the exact URL Twilio believes it called.
+// Render sits behind a reverse proxy, so req.protocol/req.get('host') cannot
+// be trusted without `trust proxy` configured. Instead we build the URL from
+// PUBLIC_BASE_URL (already used elsewhere in this file for the same reason)
+// plus the route's own path, which is fixed and known at registration time.
+//
+// Production (NODE_ENV === "production"): TWILIO_AUTH_TOKEN MUST be set and
+// EVERY request must carry a valid signature, or the request is rejected
+// with 403 before any AI/Groq cost is incurred.
+//
+// Non-production: if TWILIO_AUTH_TOKEN is missing, verification is skipped
+// entirely so local development works without a real Twilio account. If
+// TWILIO_AUTH_TOKEN IS set locally, signatures are still checked (so local
+// testing with a real Twilio sandbox still gets full coverage).
+// kind: "sms" (default, unchanged) | "voice" — only affects the TwiML body
+// returned on a 403 rejection. SMS callers pass nothing and get the exact
+// same <Message>Forbidden</Message> response as before this change.
+function verifyTwilioSignature(routePath, kind = "sms") {
+  function rejectBody() {
+    if (kind === "voice") {
+      // <Message> is an SMS verb and means nothing to Twilio Voice — a voice
+      // webhook rejection must use voice-safe TwiML or Twilio will error out
+      // trying to play it back to a live caller.
+      return `<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="rejected"/></Response>`;
+    }
+    return `<?xml version="1.0" encoding="UTF-8"?><Response><Message>Forbidden</Message></Response>`;
+  }
+
+  return (req, res, next) => {
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const isProd = process.env.NODE_ENV === "production";
+
+    if (!authToken) {
+      if (isProd) {
+        // Never accept unsigned Twilio requests in production, even if the
+        // token was somehow left unset — fail closed, not open.
+        console.error(`[TWILIO] Rejected ${routePath}: TWILIO_AUTH_TOKEN not set in production`);
+        return res.status(403).type("text/xml").send(rejectBody());
+      }
+      // Local dev bypass — no token configured, skip verification entirely.
+      console.warn(`[TWILIO] Signature check skipped for ${routePath} (no TWILIO_AUTH_TOKEN, NODE_ENV!=production)`);
+      return next();
+    }
+
+    const signature = req.headers["x-twilio-signature"];
+    const base = (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, "");
+    const fullUrl = base + routePath + (req.query.slug ? `?slug=${encodeURIComponent(req.query.slug)}` : "");
+
+    const valid = twilio.validateRequest(authToken, signature || "", fullUrl, req.body || {});
+
+    if (!valid) {
+      console.error(`[TWILIO] Invalid signature for ${routePath} from IP ${req.ip}`);
+      return res.status(403).type("text/xml").send(rejectBody());
+    }
+
+    next();
+  };
+}
+
+// ─── RATE LIMITERS (express-rate-limit) ─────────────────────────────────────────
+// Registered before the routes they protect. Each limiter is scoped to the
+// request pattern it defends — login brute force, AI cost abuse, and public
+// form spam each need different thresholds.
+//
+// Replaces the old global 200ms debounce (`lastHit`), which blocked at most
+// one rapid-fire request globally and did nothing against sustained abuse
+// (one request every 201ms was previously unlimited). That debounce is left
+// in place further down in this file for any route it still covers, but it
+// is no longer the primary defense for the routes listed below.
+function rateLimitJson(message) {
+  return {
+    statusCode: 429,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, error: message },
+    handler: (req, res, _next, options) => {
+      res.status(options.statusCode).json(options.message);
+    },
+  };
+}
+
+// Login endpoints — brute force protection. Tight window, low count.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,                  // 10 attempts per IP per window
+  ...rateLimitJson("Too many login attempts. Try again later."),
+});
+
+// AI chat endpoints — protects Groq API cost exposure.
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20,              // 20 messages per IP per minute
+  ...rateLimitJson("Too many requests. Please slow down."),
+});
+
+// Session creation — cheap per-call but must not be farmable for IDs.
+const sessionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  ...rateLimitJson("Too many session requests. Please slow down."),
+});
+
+// SMS webhooks — Twilio itself throttles retries, but this caps abuse from
+// anyone who gets past signature verification with a stolen/leaked token,
+// and fully covers the window before TWILIO_AUTH_TOKEN is configured in dev.
+const smsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  ...rateLimitJson("Too many SMS requests."),
+});
+
+// A single phone call can legitimately produce many more webhook round-trips
+// than a text exchange — every <Gather> turn is its own POST. Sized higher
+// than smsLimiter for that reason, but still bounded per IP per minute so a
+// scripted abuse attempt against the voice webhook can't run unchecked.
+const voiceLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  ...rateLimitJson("Too many voice requests."),
+});
+
+// Public application form — no auth at all, must be the strictest.
+const applyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,                    // 5 applications per IP per hour
+  ...rateLimitJson("Too many applications submitted. Try again later."),
+});
+// ──────────────────────────────────────────────────────────────────────────────
+
+
+// ─── mapPendingRow: Supabase pending_bookings row → JS pending object ───────────
+// Returns the EXACT same shape that the JSON files store and /confirm reads:
+//   { token, slug, expiresAt, lang, id, customer_name, service,
+//     email, phone, notes, start, end, cancel_token }
+// expiresAt is stored as TIMESTAMPTZ (ISO string) in Supabase;
+// /confirm checks: Date.now() > pending.expiresAt (epoch ms comparison).
+// Convert back to epoch ms on read.
+function mapPendingRow(row) {
+  return {
+    token:         row.token,
+    slug:          row.tenant_slug,
+    expiresAt:     new Date(row.expires_at).getTime(), // ISO → epoch ms
+    lang:          row.lang          ?? "es",
+    id:            row.appt_id,
+    customer_name: row.customer_name ?? "",
+    service:       row.service       ?? "",
+    email:         row.email         ?? "",
+    phone:         row.phone         ?? "",
+    notes:         row.notes         ?? "",
+    start:         row.start_at,     // TIMESTAMPTZ → ISO string; .start used by /confirm
+    end:           row.end_at,       // TIMESTAMPTZ → ISO string; .end used by /confirm
+    cancel_token:  row.cancel_token  ?? "",
+  };
+}
 
 async function savePending(slug, pending) {
-  await fs.mkdir(PENDING_DIR, { recursive: true });
-  const file = path.join(PENDING_DIR, `${pending.token}.json`);
-  await fs.writeFile(file, JSON.stringify({ slug, ...pending }, null, 2), "utf8");
+  const safeSlug = validateSlug(slug) || "demo";
+
+  // ── Write to Supabase pending_bookings ────────────────────────────────
+  try {
+    const row = {
+      token:         pending.token,
+      tenant_slug:   safeSlug,
+      expires_at:    new Date(pending.expiresAt).toISOString(), // epoch ms → ISO
+      lang:          pending.lang          ?? "es",
+      appt_id:       pending.id            ?? `appt_${Date.now()}`,
+      customer_name: pending.customer_name ?? "",
+      service:       pending.service       ?? "",
+      email:         pending.email         ?? "",
+      phone:         pending.phone         ?? "",
+      notes:         pending.notes         ?? "",
+      start_at:      pending.start,        // already ISO UTC string
+      end_at:        pending.end,          // already ISO UTC string
+      cancel_token:  pending.cancel_token  ?? "",
+      // created_at: omitted — Supabase DEFAULT now()
+    };
+
+    const { error: sbError } = await supabase
+      .from("pending_bookings")
+      .upsert(row, { onConflict: "token", ignoreDuplicates: false });
+
+    if (sbError) {
+      console.error("[PENDING] Supabase write failed for token", pending.token,
+        "—", sbError.message, "| JSON file will still be written.");
+    }
+  } catch (e) {
+    console.error("[PENDING] Supabase exception saving token", pending.token,
+      "—", e.message, "| JSON file will still be written.");
+  }
+
+  // ── Write JSON file (fallback safety net) ────────────────────────────
+  try {
+    await fs.mkdir(PENDING_DIR, { recursive: true });
+    const file = path.join(PENDING_DIR, `${pending.token}.json`);
+    await fs.writeFile(file, JSON.stringify({ slug: safeSlug, ...pending }, null, 2), "utf8");
+  } catch (jsonErr) {
+    console.error("[PENDING] JSON write failed for token", pending.token,
+      "—", jsonErr.message);
+    // Do not re-throw — Supabase is the primary store; if both fail,
+    // the error has already been logged from the Supabase block above.
+  }
 }
 
 async function loadPending(token) {
+  // ── Try Supabase first ────────────────────────────────────────────────
+  try {
+    const { data, error } = await supabase
+      .from("pending_bookings")
+      .select("*")
+      .eq("token", token)  // token is the primary key — always unique
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 = no rows found — fall through to JSON.
+      // Any other error = Supabase problem → fall through.
+      console.warn("[PENDING] Supabase read error, falling back to JSON:", error.message);
+    } else if (data) {
+      return mapPendingRow(data);
+    }
+    // PGRST116 or no data → fall through to JSON
+  } catch (e) {
+    console.warn("[PENDING] Supabase exception, falling back to JSON:", e.message);
+  }
+
+  // ── Fallback: local JSON file ─────────────────────────────────────────
   const file = path.join(PENDING_DIR, `${token}.json`);
   try {
     const raw = await fs.readFile(file, "utf8");
@@ -87,8 +352,25 @@ async function loadPending(token) {
 }
 
 async function deletePending(token) {
+  // ── Delete from Supabase ─────────────────────────────────────────────
+  try {
+    const { error: sbError } = await supabase
+      .from("pending_bookings")
+      .delete()
+      .eq("token", token); // scoped to this token only — no tenant required for PK delete
+
+    if (sbError) {
+      console.error("[PENDING] Supabase delete failed for token", token,
+        "—", sbError.message);
+    }
+  } catch (e) {
+    console.error("[PENDING] Supabase delete exception for token", token,
+      "—", e.message);
+  }
+
+  // ── Delete JSON file ─────────────────────────────────────────────────
   const file = path.join(PENDING_DIR, `${token}.json`);
-  await fs.unlink(file).catch(()=>{});
+  await fs.unlink(file).catch(() => {}); // silence ENOENT — file may not exist
 }
 
 // --- app ---
@@ -97,6 +379,41 @@ const app = express();
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// ─── SCOPED CORS FOR THE EMBEDDABLE WIDGET ──────────────────────────────────────
+// Applied ONLY to /api/session and /api/chat — the two endpoints the public
+// widget.js script calls from a customer's own website (a different origin
+// than this server).
+//
+// Deliberately NOT global: app.use(cors()) would open every route, including
+// /admin/*, /client/*, and /ambassador/* to cross-origin requests. Those routes
+// stay same-origin-only because they rely on cookie auth, and a wide-open CORS
+// policy combined with cookies is a classic CSRF-adjacent misconfiguration.
+//
+// This widget endpoint does NOT use cookies for auth — sessionId is passed
+// explicitly in the request body/query, exactly like the existing SMS flow
+// passes its own session identifier. No credentials are sent or required,
+// so credentials are deliberately left disabled in the CORS response.
+function widgetCors(req, res, next) {
+  const origin = req.headers.origin;
+  // Reflect any Origin that looks like a real HTTP(S) origin. Slugs/tenants
+  // are not secrets (already visible in the embed snippet itself), and these
+  // two routes are already protected by validateSlug, chatLimiter, and
+  // sessionLimiter — the same protections that already apply to every other
+  // caller of these endpoints (web dashboard, SMS bridge, etc).
+  if (origin && /^https?:\/\/[^/]+$/.test(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // No Access-Control-Allow-Credentials — this widget never sends cookies.
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+}
+// ──────────────────────────────────────────────────────────────────────────────
 
 // 🔍 Middleware de debug seguro
 app.use((req, res, next) => {
@@ -216,7 +533,7 @@ const slug = (req.query.slug || pending.slug || pending.client || "demo").toStri
             timezone: tz,
             whenLabel: lang === "es" ? "mañana" : "tomorrow",
           });
-await scheduleReminder({ to: appt.email, subject: rem1.subject, text: rem1.text, html: rem1.html, fireAt: r1 });
+await scheduleReminder({ to: appt.email, subject: rem1.subject, text: rem1.text, html: rem1.html, fireAt: r1, tenantSlug: slug, appointmentId: appt.id });
         }
 
         if (r2 > now) {
@@ -228,7 +545,7 @@ await scheduleReminder({ to: appt.email, subject: rem1.subject, text: rem1.text,
             timezone: tz,
             whenLabel: lang === "es" ? "en 2 horas" : "in 2 hours",
           });
-await scheduleReminder({ to: appt.email, subject: rem2.subject, text: rem2.text, html: rem2.html, fireAt: r2 });
+await scheduleReminder({ to: appt.email, subject: rem2.subject, text: rem2.text, html: rem2.html, fireAt: r2, tenantSlug: slug, appointmentId: appt.id });
         }
       }
     } catch (e) {
@@ -295,6 +612,14 @@ app.get("/cancel", async (req, res) => {
 
 app.use("/public", express.static(PUBLIC_DIR));
 
+// Embeddable chat widget — served at the bare /widget.js path so the embed
+// snippet customers copy-paste is short and clean: <script src=".../widget.js">
+// Physically lives in PUBLIC_DIR alongside the rest of the public assets.
+app.get("/widget.js", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300"); // 5 min — short enough to pick up fixes fast
+  res.sendFile(path.join(PUBLIC_DIR, "widget.js"));
+});
+
 // ROOT
 app.get("/", (req, res) => res.redirect("/login"));
 
@@ -303,8 +628,17 @@ app.get("/login", (req, res) => {
   res.sendFile(path.join(ADMIN_DIR, "login.html"));
 });
 
-app.use("/admin", verifyAdmin, express.static(ADMIN_DIR));
+// Static assets for admin panel (css, js, images) — no auth needed for assets.
+// Each route that serves admin HTML already has verifyAdmin applied directly.
+app.use("/admin", express.static(ADMIN_DIR));
 app.get("/admin", verifyAdmin, (req, res) => {
+  res.sendFile(path.join(ADMIN_DIR, "index.html"));
+});
+
+// Catch-all for /admin/:slug — serves admin/index.html which reads the slug
+// from window.location.pathname to load the correct tenant config.
+// Without this Express returns 404 for /admin/some-slug.
+app.get(/^\/admin\/(?!api\/).+$/, verifyAdmin, (req, res) => {
   res.sendFile(path.join(ADMIN_DIR, "index.html"));
 });
 
@@ -339,6 +673,7 @@ app.get("/client", verifyClient, (req, res) => {
 // LOGIN (JSON friendly)
 app.post(
   "/client/auth/login",
+  loginLimiter,
   express.json(),
   async (req, res) => {
     const { email, password } = req.body || {};
@@ -415,7 +750,7 @@ function isSlotFree(existing, start, end) {
 }
 
 
-app.post("/auth/login", async (req, res) => {
+app.post("/auth/login", loginLimiter, async (req, res) => {
   const { email, password } = req.body || {};
 
   if (!email || !password) {
@@ -514,35 +849,248 @@ async function sendEmail({ to, subject, text, html }) {
 }
 
 // --- tenants ---
+// ─── TENANT CACHE (5-minute TTL) ──────────────────────────────────────────────
+// Stores { data: cfg, expiresAt: epoch_ms } entries.
+// TTL prevents stale config from persisting after a Supabase update.
+// Cache is keyed by validated slug.
 const tenantCache = new Map();
+const TENANT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function cacheGet(slug) {
+  const entry = tenantCache.get(slug);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    tenantCache.delete(slug); // expired
+    return null;
+  }
+  return entry.data;
+}
+
+function cacheSet(slug, cfg) {
+  tenantCache.set(slug, { data: cfg, expiresAt: Date.now() + TENANT_CACHE_TTL_MS });
+}
+
+function cacheDel(slug) {
+  tenantCache.delete(slug);
+}
 
 // --- appointments (citas) ---
+// ─── mapApptRow: Supabase row → JS appointment object ──────────────────────────
+// Supabase stores start_at / end_at (TIMESTAMPTZ).
+// All callers in index.js use .start and .end — map back here.
+function mapApptRow(row) {
+  return {
+    id:            row.id,
+    title:         row.title         ?? row.service ?? "Appointment",
+    service:       row.service       ?? "",
+    customer_name: row.customer_name ?? "",
+    client_name:   row.client_name   ?? row.customer_name ?? "",
+    start:         row.start_at,   // callers use .start
+    end:           row.end_at,     // callers use .end
+    email:         row.email        ?? null,
+    phone:         row.phone        ?? null,
+    notes:         row.notes        ?? "",
+    confirmed:     row.confirmed    !== false,
+    cancel_token:  row.cancel_token ?? "",
+    created_at:    row.created_at,
+    updated_at:    row.updated_at,
+  };
+}
+
 async function loadAppointments(slug) {
-  const file = path.join(APPOINTMENTS_DIR, `${slug}.json`);
+  const safe = validateSlug(slug);
+  if (!safe) { console.warn("[APPTS] rejected invalid slug:", slug); return []; }
+
+  // ── Try Supabase first ────────────────────────────────────────────────
+  try {
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("*")
+      .eq("tenant_slug", safe)
+      .order("start_at", { ascending: true });
+
+    if (error) {
+      console.warn("[APPTS] Supabase read failed, falling back to JSON:", error.message);
+    } else {
+      return (data ?? []).map(mapApptRow);
+    }
+  } catch (e) {
+    console.warn("[APPTS] Supabase exception, falling back to JSON:", e.message);
+  }
+
+  // ── Fallback: local JSON file ─────────────────────────────────────────
+  const file = path.join(APPOINTMENTS_DIR, `${safe}.json`);
+  assertPathSafe(file, APPOINTMENTS_DIR);
   try {
     const raw = await fs.readFile(file, "utf8");
     return JSON.parse(raw);
   } catch (e) {
     if (e.code === "ENOENT") return [];
-    console.error("[APPTS] load error for", slug, e.message);
+    console.error("[APPTS] JSON fallback error for", safe, e.message);
     return [];
   }
 }
 
 async function saveAppointments(slug, list) {
-  const file = path.join(APPOINTMENTS_DIR, `${slug}.json`);
-  await fs.mkdir(APPOINTMENTS_DIR, { recursive: true });
-  await fs.writeFile(file, JSON.stringify(list, null, 2), "utf8");
+  const safe = validateSlug(slug);
+  if (!safe) throw new Error(`saveAppointments: invalid slug "${slug}"`);
+
+  // ── STEP 1: Fetch existing Supabase IDs for this tenant ───────────────
+  // Only IDs are fetched — minimal payload.
+  // If this read fails we abort the delete step entirely (safety first).
+  let remoteIds = null; // null = "fetch failed, do not delete anything"
+  try {
+    const { data: existing, error: fetchErr } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("tenant_slug", safe); // tenant-scoped — never touches another tenant
+
+    if (fetchErr) {
+      console.error("[APPTS] Supabase ID fetch failed for", safe,
+        "— skipping delete sync:", fetchErr.message);
+      // remoteIds stays null → delete step is skipped below
+    } else {
+      remoteIds = new Set((existing ?? []).map(r => r.id));
+    }
+  } catch (e) {
+    console.error("[APPTS] Supabase ID fetch exception for", safe,
+      "— skipping delete sync:", e.message);
+    // remoteIds stays null → delete step is skipped below
+  }
+
+  // ── STEP 2: Delete orphaned Supabase rows ─────────────────────────────
+  // Only runs when remoteIds was successfully fetched.
+  // Deletes rows whose id is in Supabase but NOT in the incoming list.
+  // The .eq("tenant_slug", safe) guard ensures cross-tenant safety even
+  // if ids somehow matched across tenants (they use prefixed format).
+  if (remoteIds !== null) {
+    const incomingIds = new Set(list.map(a => a.id).filter(Boolean));
+    const toDelete    = [...remoteIds].filter(id => !incomingIds.has(id));
+
+    if (toDelete.length > 0) {
+      try {
+        const { error: delErr } = await supabase
+          .from("appointments")
+          .delete()
+          .eq("tenant_slug", safe)   // tenant isolation — never deletes another tenant's rows
+          .in("id", toDelete);
+
+        if (delErr) {
+          console.error("[APPTS] Supabase delete failed for", safe,
+            "IDs:", toDelete, "—", delErr.message,
+            "| JSON file will still be updated.");
+        } else {
+          console.log("[APPTS] Deleted", toDelete.length,
+            "orphaned row(s) from Supabase for tenant", safe, ":", toDelete);
+        }
+      } catch (e) {
+        console.error("[APPTS] Supabase delete exception for", safe,
+          "—", e.message, "| JSON file will still be updated.");
+      }
+    }
+  }
+
+  // ── STEP 3: Upsert the incoming list to Supabase ──────────────────────
+  // Runs regardless of whether the delete step succeeded or was skipped.
+  // Empty list → no upsert (nothing to write, deletes already handled above).
+  if (list.length > 0) {
+    const rows = list.map(a => ({
+      id:            a.id,
+      tenant_slug:   safe,
+      title:         a.title         ?? a.service ?? "Appointment",
+      service:       a.service       ?? "",
+      customer_name: a.customer_name ?? "",
+      client_name:   a.client_name   ?? a.customer_name ?? "",
+      start_at:      a.start,        // JS field is .start
+      end_at:        a.end,          // JS field is .end
+      email:         a.email         ?? null,
+      phone:         a.phone         ?? null,
+      notes:         a.notes         ?? "",
+      confirmed:     a.confirmed     !== false,
+      cancel_token:  a.cancel_token  ?? "",
+      created_at:    a.created_at    ?? new Date().toISOString(),
+      updated_at:    new Date().toISOString(),
+    }));
+
+    const { error: sbError } = await supabase
+      .from("appointments")
+      .upsert(rows, { onConflict: "id", ignoreDuplicates: false });
+
+    if (sbError) {
+      // Double-booking exclusion violation (SQLSTATE 23P01) or unique violation
+      if (sbError.code === "23P01" || sbError.code === "23505") {
+        throw new Error("DOUBLE_BOOKING: " + sbError.message);
+      }
+      // Other Supabase errors: log clearly but continue to JSON write
+      console.error("[APPTS] Supabase write failed for", safe, "—", sbError.message,
+        "| JSON file will still be updated.");
+    }
+  }
+
+  // ── STEP 4: Write to JSON file (fallback safety net) ──────────────────
+  // Unchanged from Phase 3C. Runs regardless of Supabase results.
+  const file = path.join(APPOINTMENTS_DIR, `${safe}.json`);
+  assertPathSafe(file, APPOINTMENTS_DIR);
+  try {
+    await fs.mkdir(APPOINTMENTS_DIR, { recursive: true });
+    await fs.writeFile(file, JSON.stringify(list, null, 2), "utf8");
+  } catch (jsonErr) {
+    console.error("[APPTS] JSON write failed for", safe, "—", jsonErr.message);
+    // Do not re-throw: Supabase is the primary store, JSON is the fallback.
+    // If JSON write fails but Supabase succeeded, data is safe.
+  }
+}
+
+// ─── mapTenantRow: Supabase row → cfg object ────────────────────────────────────
+// Must return the exact same shape as the JSON files so all callers work unchanged.
+// cfg fields: system, vars, faq, fallback, twilio_number, name
+function mapTenantRow(row) {
+  return {
+    name:          row.name          ?? "",
+    system:        row.system_prompt ?? "",
+    vars:          row.vars          ?? {},
+    faq:           Array.isArray(row.faq) ? row.faq : [],
+    fallback:      row.fallback      ?? "",
+    twilio_number: row.twilio_number ?? row.vars?.twilio_number ?? "",
+  };
 }
 
 async function loadTenant(slug = "demo") {
-  const key = (slug || "demo").toLowerCase();
-  if (tenantCache.has(key)) return tenantCache.get(key);
+  const key = validateSlug(slug) || "demo";
+
+  // ── TTL cache hit ─────────────────────────────────────────────────────
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  // ── Try Supabase first ────────────────────────────────────────────────
+  try {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("slug", key)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 = no rows — expected when tenant not in Supabase yet.
+      // Any other error = Supabase problem → fall through to JSON.
+      console.warn("[TENANT] Supabase read error, falling back to JSON:", error.message);
+    } else if (data) {
+      const cfg = mapTenantRow(data);
+      cacheSet(key, cfg);
+      return cfg;
+    }
+    // No error but no data (PGRST116) → fall through to JSON
+  } catch (e) {
+    console.warn("[TENANT] Supabase exception, falling back to JSON:", e.message);
+  }
+
+  // ── Fallback: local JSON file ─────────────────────────────────────────
   const file = path.join(TENANTS_DIR, `${key}.json`);
+  assertPathSafe(file, TENANTS_DIR);
   try {
     const raw = await fs.readFile(file, "utf8");
     const cfg = JSON.parse(raw);
-    tenantCache.set(key, cfg);
+    cacheSet(key, cfg);
     return cfg;
   } catch (e) {
     if (key !== "demo") return loadTenant("demo");
@@ -566,7 +1114,7 @@ app.use((req, res, next) => {
 });
 
 
-app.post("/admin/api/login", async (req, res) => {
+app.post("/admin/api/login", loginLimiter, async (req, res) => {
   const { user, pass, username, password } = req.body || {};
 
   const uIn = (user ?? username ?? "").trim();
@@ -582,7 +1130,7 @@ app.post("/admin/api/login", async (req, res) => {
   const ok = uIn === u && (await bcrypt.compare(pIn, hash));
   if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
-  res.cookie("adm", process.env.ADMIN_TOKEN || "devtoken", {
+  res.cookie("adm", process.env.ADMIN_TOKEN, {
     httpOnly: true,
     sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -601,12 +1149,27 @@ app.post("/admin/api/logout", (req, res) => {
 // =========================
 
 app.get("/admin/api/tenants", verifyAdmin, async (req,res)=>{
+  // ── Try Supabase first (survives Render ephemeral disk resets) ──────────
+  try {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("slug")
+      .order("slug", { ascending: true });
+
+    if (!error && data) {
+      return res.json({ tenants: data.map(r => r.slug) });
+    }
+    console.warn("[ADMIN] Supabase tenant list failed, falling back to JSON:", error?.message);
+  } catch (e) {
+    console.warn("[ADMIN] Supabase tenant list exception, falling back to JSON:", e.message);
+  }
+
+  // ── Fallback: read from local JSON files ─────────────────────────────────
   try{
     const files = await fs.readdir(TENANTS_DIR);
     const tenants = files
       .filter(f=>f.endsWith(".json"))
       .map(f=>f.replace(".json",""));
-
     res.json({ tenants });
   }catch(e){
     console.error("[ADMIN] list tenants error:", e);
@@ -625,21 +1188,74 @@ app.get("/admin/api/tenant/:slug", verifyAdmin, async (req,res)=>{
 });
 
 app.post("/admin/api/tenant/save", verifyAdmin, async (req,res)=>{
-  try{
-    const { slug, config } = req.body || {};
-    if(!slug || !config) {
-      return res.status(400).json({ error:"missing data" });
-    }
-
-    const file = path.join(TENANTS_DIR, `${slug}.json`);
-    await fs.writeFile(file, JSON.stringify(config,null,2), "utf8");
-
-    tenantCache.delete(slug); // refrescar cache
-    res.json({ ok:true });
-  }catch(e){
-    console.error("[ADMIN] save tenant error:", e);
-    res.status(500).json({ error:"Cannot save tenant" });
+  const { slug, config, client_email, client_password } = req.body || {};
+  const safeSlug = validateSlug(slug);
+  if (!safeSlug || !config) {
+    return res.status(400).json({ error: !safeSlug ? "invalid slug" : "missing config" });
   }
+
+  const errors = [];
+
+  // ── Write to Supabase ─────────────────────────────────────────────────
+  try {
+    const row = {
+      slug:          safeSlug,
+      name:          config.vars?.business || config.vars?.name || config.name || safeSlug,
+      system_prompt: config.system  ?? null,
+      vars:          config.vars    ?? {},
+      faq:           Array.isArray(config.faq) ? config.faq : [],
+      fallback:      config.fallback ?? null,
+      twilio_number: config.twilio_number ?? config.vars?.twilio_number ?? null,
+      is_active:     true,
+      updated_at:    new Date().toISOString(),
+    };
+    const { error: sbError } = await supabase
+      .from("tenants")
+      .upsert(row, { onConflict: "slug", ignoreDuplicates: false });
+
+    if (sbError) {
+      console.error("[ADMIN] Supabase tenant save failed for", safeSlug, "—", sbError.message);
+      errors.push("supabase: " + sbError.message);
+    }
+  } catch (e) {
+    console.error("[ADMIN] Supabase tenant save exception:", e.message);
+    errors.push("supabase: " + e.message);
+  }
+
+  // ── Write to JSON file (always — fallback safety net) ─────────────────
+  try {
+    const file = path.join(TENANTS_DIR, `${safeSlug}.json`);
+    assertPathSafe(file, TENANTS_DIR);
+    await fs.mkdir(TENANTS_DIR, { recursive: true });
+    await fs.writeFile(file, JSON.stringify(config, null, 2), "utf8");
+  } catch (jsonErr) {
+    console.error("[ADMIN] JSON tenant save failed for", safeSlug, "—", jsonErr.message);
+    errors.push("json: " + jsonErr.message);
+  }
+
+  // ── Create client user account if email + password provided ─────────────
+  if (client_email && client_password) {
+    try {
+      if (client_password.length < 8) {
+        errors.push("client: Password must be at least 8 characters");
+      } else {
+        const hash = await bcrypt.hash(client_password, 10);
+        await upsertClientUser(safeSlug, client_email, hash);
+      }
+    } catch (e) {
+      console.error("[ADMIN] client user creation failed:", e.message);
+      errors.push("client: " + e.message);
+    }
+  }
+
+  // ── Invalidate cache regardless of write results ───────────────────────
+  cacheDel(safeSlug);
+
+  if (errors.length > 0) {
+    // Return 207 (Multi-Status) so frontend knows which writes failed.
+    return res.status(207).json({ ok: false, errors });
+  }
+  res.json({ ok: true });
 });
 
 // =========================
@@ -706,13 +1322,62 @@ async function handleLLMCalendarActions(slug, llmText) {
   }
 }
 
+// ─── ADMIN APPOINTMENT ENDPOINTS ───────────────────────────────────────────
+// ALL three routes require verifyAdmin. The admin JWT provides req.admin.role.
+// Admins are super-users and may read/write any tenant slug.
+// Slug validation (allowlist) is enforced by validateSlug() defined in STEP 2.
+
+// DELETE /admin/api/tenant/:slug
+// Called by the X button on each client card in the dashboard.
+// Removes the tenant from Supabase, deletes the JSON config file,
+// and removes all appointments for that tenant from Supabase.
+// Does NOT delete client_users rows (they can be reused if tenant is recreated).
+app.delete("/admin/api/tenant/:slug", verifyAdmin, async (req, res) => {
+  const safeSlug = validateSlug(req.params.slug);
+  if (!safeSlug) return res.status(400).json({ error: "invalid slug" });
+
+  const errors = [];
+
+  // ── Delete from Supabase tenants (cascades to appointments via FK) ────
+  try {
+    const { error: sbErr } = await supabase
+      .from("tenants")
+      .delete()
+      .eq("slug", safeSlug);
+    if (sbErr) {
+      console.error("[ADMIN] Supabase tenant delete failed:", sbErr.message);
+      errors.push("supabase: " + sbErr.message);
+    }
+  } catch (e) {
+    console.error("[ADMIN] Supabase tenant delete exception:", e.message);
+    errors.push("supabase: " + e.message);
+  }
+
+  // ── Delete JSON config file ────────────────────────────────────────────
+  try {
+    const file = path.join(TENANTS_DIR, `${safeSlug}.json`);
+    assertPathSafe(file, TENANTS_DIR);
+    await fs.unlink(file).catch(() => {}); // silence if already gone
+  } catch (e) {
+    console.error("[ADMIN] JSON tenant delete failed:", e.message);
+    errors.push("json: " + e.message);
+  }
+
+  // ── Invalidate cache ───────────────────────────────────────────────────
+  cacheDel(safeSlug);
+
+  if (errors.length > 0) {
+    return res.status(207).json({ ok: false, errors });
+  }
+  res.json({ ok: true });
+});
+
 // GET /admin/api/appointments/:slug?from=&to=
-app.get("/admin/api/appointments/:slug", async (req, res) => {
-  const { slug } = req.params;
+app.get("/admin/api/appointments/:slug", verifyAdmin, async (req, res) => {
+  const slug = validateSlug(req.params.slug);
+  if (!slug) return res.status(400).json({ error: "invalid slug" });
+
   const { from, to } = req.query;
-
-  if (!slug) return res.status(400).json({ error: "missing slug" });
-
   try {
     let list = await loadAppointments(slug);
 
@@ -738,12 +1403,14 @@ app.get("/admin/api/appointments/:slug", async (req, res) => {
 
 // POST /admin/api/appointments/:slug
 // body: { id?, customer_name, service, start, end, notes }
-app.post("/admin/api/appointments/:slug", async (req, res) => {
+app.post("/admin/api/appointments/:slug", verifyAdmin, async (req, res) => {
+  const slug = validateSlug(req.params.slug);
+  if (!slug) return res.status(400).json({ error: "invalid slug" });
+
   try {
-    const { slug } = req.params;
     const { id, customer_name, service, start, end, notes } = req.body || {};
-    if (!slug || !start || !end) {
-      return res.status(400).json({ error: "missing fields" });
+    if (!start || !end) {
+      return res.status(400).json({ error: "missing fields: start, end required" });
     }
 
     const list = await loadAppointments(slug);
@@ -757,17 +1424,16 @@ app.post("/admin/api/appointments/:slug", async (req, res) => {
     }
 
     list.push({
-  id: apptId,
-  customer_name: customer_name || "",
-  service:       service       || "",
-  start,
-  end,
-  notes: notes || "",
-  cancel_token: crypto.randomBytes(16).toString("hex"),
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-});
-
+      id:            apptId,
+      customer_name: customer_name || "",
+      service:       service       || "",
+      start,
+      end,
+      notes:         notes         || "",
+      cancel_token:  crypto.randomBytes(16).toString("hex"),
+      created_at:    new Date().toISOString(),
+      updated_at:    new Date().toISOString(),
+    });
 
     list.sort((a, b) => new Date(a.start) - new Date(b.start));
 
@@ -779,11 +1445,12 @@ app.post("/admin/api/appointments/:slug", async (req, res) => {
   }
 });
 
-// DELETE /admin/api/appointments/:id?slug=demo
-app.delete("/admin/api/appointments/:id", async (req, res) => {
-  const { slug } = req.query;
+// DELETE /admin/api/appointments/:id?slug=<tenant_slug>
+app.delete("/admin/api/appointments/:id", verifyAdmin, async (req, res) => {
+  const slug = validateSlug(req.query.slug);
   const { id } = req.params;
-  if (!slug || !id) return res.status(400).json({ error: "missing slug or id" });
+  if (!slug) return res.status(400).json({ error: "invalid or missing slug" });
+  if (!id)   return res.status(400).json({ error: "missing id" });
 
   try {
     const list = await loadAppointments(slug);
@@ -826,26 +1493,187 @@ function buildSystemMessages(cfg) {
 }
 
 // --- logging ---
-async function logChat(slug, user, bot) {
+// logChat: dual-write to Supabase conversation_messages + JSONL fallback.
+// sessionId is optional — passed when the caller has it (web chat sessions).
+// Never throws: logging failure must not block or slow chat responses.
+async function logChat(slug, user, bot, sessionId = null) {
+  const safe = validateSlug(slug);
+  if (!safe) return; // invalid slug — skip silently
+
+  const now = new Date().toISOString();
+
+  // ── Write to Supabase conversation_messages (2 rows: user + assistant) ──
   try {
-    const day = new Date().toISOString().slice(0, 10);
-    const dir = path.join(__dirname, "logs");
-    const file = path.join(dir, `${slug}-${day}.jsonl`);
+    const rows = [
+      {
+        session_id:  sessionId ?? null,
+        tenant_slug: safe,
+        channel:     "web",
+        role:        "user",
+        content:     user ?? "",
+        created_at:  now,
+      },
+      {
+        session_id:  sessionId ?? null,
+        tenant_slug: safe,
+        channel:     "web",
+        role:        "assistant",
+        content:     bot  ?? "",
+        created_at:  now,
+      },
+    ];
+
+    const { error: sbError } = await supabase
+      .from("conversation_messages")
+      .insert(rows);
+
+    if (sbError) {
+      console.error("[LOG] Supabase insert failed:", sbError.message,
+        "| JSONL fallback will still be written.");
+    }
+  } catch (e) {
+    console.error("[LOG] Supabase exception:", e.message,
+      "| JSONL fallback will still be written.");
+  }
+
+  // ── JSONL fallback (unchanged behaviour) ─────────────────────────────
+  try {
+    const day  = now.slice(0, 10);
+    const dir  = path.join(__dirname, "logs");
+    const file = path.join(dir, `${safe}-${day}.jsonl`);
+    assertPathSafe(file, dir);
     await fs.mkdir(dir, { recursive: true });
-    const line =
-      JSON.stringify({ t: new Date().toISOString(), user, bot }) + "\n";
+    const line = JSON.stringify({ t: now, user, bot }) + "\n";
     await fs.appendFile(file, line, "utf8");
   } catch (e) {
-    console.error("[LOG] save error:", e);
+    console.error("[LOG] JSONL write error:", e.message);
   }
 }
 
 // --- sessions + language ---
-const sessions = new Map(); // sessionId -> { state, draft, lang }
-function getSession(id = "anon") {
-  if (!sessions.has(id))
-    sessions.set(id, { state: "IDLE", draft: {}, lang: null });
-  return sessions.get(id);
+// ─── SESSION STORE ────────────────────────────────────────────────────────────
+// Primary store: Supabase chat_sessions table (survives redeploys).
+// Cache: in-memory sessions Map with 2-minute TTL (reduces Supabase round-trips).
+// Cache entries: { data: sessionObj, expiresAt: epoch_ms }
+const sessions = new Map();
+const SESSION_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+// Default session object shape — every field runChat ever reads must be present.
+function defaultSession() {
+  return {
+    state:               "IDLE",
+    draft:               {},
+    history:             [],
+    lang:                null,
+    cancelFlow:          null,
+    lastDraft:           null,
+    lastSuggestions:     null,
+    lastSuggestionTz:    null,
+    pendingConfirmation: false,
+    pendingEmail:        null,
+    priceAskCount:       0,
+    _repeat:             null,
+    repeat_flag:         false,
+  };
+}
+
+// ─── mapSessionRow: Supabase row → JS session object ─────────────────────────
+function mapSessionRow(row) {
+  return {
+    state:               row.state               ?? "IDLE",
+    draft:               row.draft               ?? {},
+    history:             Array.isArray(row.history) ? row.history : [],
+    lang:                row.lang                ?? null,
+    cancelFlow:          row.cancel_flow         ?? null,
+    lastDraft:           row.last_draft          ?? null,
+    lastSuggestions:     row.last_suggestions    ?? null,
+    lastSuggestionTz:    row.last_suggestion_tz  ?? null,
+    pendingConfirmation: row.pending_confirmation ?? false,
+    pendingEmail:        row.pending_email        ?? null,
+    priceAskCount:       row.price_ask_count      ?? 0,
+    _repeat:             null,       // runtime-only guard, not persisted
+    repeat_flag:         row.repeat_flag          ?? false,
+  };
+}
+
+// ─── getSession: async, Supabase-first ────────────────────────────────────────
+// Returns the session object directly (no wrapper).
+// Creates a default session if none exists in cache or Supabase.
+async function getSession(id = "anon", slug = "demo", channel = "web") {
+  // ── Cache hit ──────────────────────────────────────────────────────────
+  const cached = sessions.get(id);
+  if (cached) {
+    if (Date.now() < cached.expiresAt) return cached.data;
+    sessions.delete(id); // expired
+  }
+
+  // ── Try Supabase ───────────────────────────────────────────────────────
+  try {
+    const { data, error } = await supabase
+      .from("chat_sessions")
+      .select("*")
+      .eq("session_id", id)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      console.warn("[SESSION] Supabase read error, using default:", error.message);
+    } else if (data) {
+      const sess = mapSessionRow(data);
+      sessions.set(id, { data: sess, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+      return sess;
+    }
+    // PGRST116 = no row yet → fall through to create default
+  } catch (e) {
+    console.warn("[SESSION] Supabase exception, using default:", e.message);
+  }
+
+  // ── Create default session ─────────────────────────────────────────────
+  const sess = defaultSession();
+  sessions.set(id, { data: sess, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+  return sess;
+}
+
+// ─── saveSession: persist session to Supabase + refresh cache ────────────────
+// Fire-and-forget safe: errors are logged but never thrown to caller.
+// slug is required to satisfy the tenant_slug FK constraint.
+async function saveSession(id, slug, sess, channel = "web") {
+  const safeSlug = validateSlug(slug) || "demo";
+
+  // Refresh cache immediately with the latest state
+  sessions.set(id, { data: sess, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+
+  // Persist to Supabase (non-blocking — we await but errors don't propagate)
+  try {
+    const row = {
+      session_id:           id,
+      tenant_slug:          safeSlug,
+      channel:              channel,
+      lang:                 sess.lang                ?? null,
+      state:                sess.state               ?? "IDLE",
+      draft:                sess.draft               ?? {},
+      history:              sess.history             ?? [],
+      cancel_flow:          sess.cancelFlow          ?? null,
+      last_draft:           sess.lastDraft           ?? null,
+      last_suggestions:     sess.lastSuggestions     ?? null,
+      last_suggestion_tz:   sess.lastSuggestionTz    ?? null,
+      pending_confirmation: sess.pendingConfirmation ?? false,
+      pending_email:        sess.pendingEmail         ?? null,
+      price_ask_count:      sess.priceAskCount        ?? 0,
+      repeat_flag:          sess.repeat_flag          ?? false,
+      last_activity_at:     new Date().toISOString(),
+      // _repeat is a runtime guard, intentionally not persisted
+    };
+
+    const { error } = await supabase
+      .from("chat_sessions")
+      .upsert(row, { onConflict: "session_id", ignoreDuplicates: false });
+
+    if (error) {
+      console.error("[SESSION] Supabase save failed for", id, "—", error.message);
+    }
+  } catch (e) {
+    console.error("[SESSION] Supabase save exception for", id, "—", e.message);
+  }
 }
 
 // Default language: EN
@@ -935,25 +1763,105 @@ console.log("BOOT", {
   TENANTS_DIR,
 });
 
-async function logSms(slug, from, to, userText, botText) {
+// logSms: dual-write to Supabase sms_messages + JSONL fallback.
+// Inserts 2 rows: direction='inbound' (user→bot) and direction='outbound' (bot→user).
+// Never throws: logging failure must not block or slow SMS responses.
+// logVoiceTranscript: JSONL-only transcript logger for voice calls.
+// Deliberately NOT written into sms_messages — that table's schema (direction
+// CHECK IN ('inbound','outbound'), no call-level metadata) doesn't fit a
+// multi-turn call transcript, and stretching it would make future queries
+// ambiguous about which channel produced a row. No new Supabase table is
+// created here — adding one is a schema change, which is out of scope for
+// this phase. This mirrors logSms's JSONL fallback pattern exactly, just as
+// the sole storage location for now.
+// turns: array of { role: "user" | "assistant", text }
+async function logVoiceTranscript(slug, callSid, from, to, turns) {
+  const safe = validateSlug(slug);
+  if (!safe) return; // invalid slug — skip silently
+
   try {
-    const day = new Date().toISOString().slice(0, 10);
-    const dir = path.join(__dirname, "logs", "sms");
-    const file = path.join(dir, `${slug}-${day}.jsonl`);
+    const now = new Date().toISOString();
+    const day = now.slice(0, 10);
+    const dir = path.join(__dirname, "logs", "voice");
+    const file = path.join(dir, `${safe}-${day}.jsonl`);
+    assertPathSafe(file, dir);
     await fs.mkdir(dir, { recursive: true });
 
     const line = JSON.stringify({
-      t: new Date().toISOString(),
-      slug,
+      t: now,
+      slug: safe,
+      callSid,
       from,
       to,
-      user: userText,
-      bot: botText
+      turns,
     }) + "\n";
 
     await fs.appendFile(file, line, "utf8");
   } catch (e) {
-    console.error("[SMS LOG] error:", e.message);
+    console.error("[VOICE LOG] JSONL write error:", e.message);
+  }
+}
+
+async function logSms(slug, from, to, userText, botText) {
+  const safe = validateSlug(slug);
+  if (!safe) return; // invalid slug — skip silently
+
+  const now = new Date().toISOString();
+
+  // ── Write to Supabase sms_messages (2 rows: inbound + outbound) ───────
+  try {
+    const rows = [
+      {
+        tenant_slug:  safe,
+        from_number:  from,
+        to_number:    to,
+        direction:    "inbound",
+        content:      userText ?? "",
+        created_at:   now,
+      },
+      {
+        tenant_slug:  safe,
+        from_number:  to,    // outbound: server sends FROM the tenant number
+        to_number:    from,  // outbound: server sends TO the customer
+        direction:    "outbound",
+        content:      botText  ?? "",
+        created_at:   now,
+      },
+    ];
+
+    const { error: sbError } = await supabase
+      .from("sms_messages")
+      .insert(rows);
+
+    if (sbError) {
+      console.error("[SMS LOG] Supabase insert failed:", sbError.message,
+        "| JSONL fallback will still be written.");
+    }
+  } catch (e) {
+    console.error("[SMS LOG] Supabase exception:", e.message,
+      "| JSONL fallback will still be written.");
+  }
+
+  // ── JSONL fallback (unchanged behaviour) ─────────────────────────────
+  try {
+    const day  = now.slice(0, 10);
+    const dir  = path.join(__dirname, "logs", "sms");
+    const file = path.join(dir, `${safe}-${day}.jsonl`);
+    assertPathSafe(file, dir);
+    await fs.mkdir(dir, { recursive: true });
+
+    const line = JSON.stringify({
+      t: now,
+      slug: safe,
+      from,
+      to,
+      user: userText,
+      bot:  botText
+    }) + "\n";
+
+    await fs.appendFile(file, line, "utf8");
+  } catch (e) {
+    console.error("[SMS LOG] JSONL write error:", e.message);
   }
 }
 
@@ -1033,47 +1941,142 @@ let PENDING_REMINDERS = []; // { to, subject, text, html, fireAtISO }
 
 /**
  * Programa un recordatorio por email.
- * fireAt: Date | luxon.DateTime
+ * fireAt:        Date | luxon.DateTime
+ * tenantSlug:    optional — used to populate tenant_slug FK in Supabase
+ * appointmentId: optional — used to populate appointment_id FK in Supabase
  */
-async function scheduleReminder({ to, subject, text, html, fireAt }) {
+async function scheduleReminder({ to, subject, text, html, fireAt,
+                                  tenantSlug = null, appointmentId = null }) {
   const fireAtISO =
     fireAt && typeof fireAt.toUTC === "function"
       ? fireAt.toUTC().toISO()
       : DateTime.fromJSDate(fireAt).toUTC().toISO();
 
+  // ── Write to Supabase reminders table ────────────────────────────────
+  try {
+    const row = {
+      tenant_slug:    tenantSlug ? (validateSlug(tenantSlug) || null) : null,
+      appointment_id: appointmentId ?? null,
+      to_email:       to,
+      subject:        subject,
+      body_text:      text   ?? null,
+      body_html:      html   ?? null,
+      fire_at:        fireAtISO,
+      status:         "pending",
+      // created_at: omitted — Supabase DEFAULT now()
+    };
+
+    const { error: sbError } = await supabase
+      .from("reminders")
+      .insert(row);
+
+    if (sbError) {
+      console.error("[REMINDER] Supabase insert failed:", sbError.message,
+        "| In-memory fallback will be used.");
+    }
+  } catch (e) {
+    console.error("[REMINDER] Supabase exception:", e.message,
+      "| In-memory fallback will be used.");
+  }
+
+  // ── Keep in-memory + JSON fallback ───────────────────────────────────
   PENDING_REMINDERS.push({ to, subject, text, html, fireAtISO });
   PENDING_REMINDERS.sort((a, b) => (a.fireAtISO < b.fireAtISO ? -1 : 1));
-
   await saveRemindersToDisk(PENDING_REMINDERS);
 }
 
-// Worker que dispara correos cuando llegue la hora (revisa cada 30s)
+// ─── REMINDER WORKER (runs every 30s) ────────────────────────────────────────
+// Dual-source: queries Supabase first, then falls back to PENDING_REMINDERS.
+// Supabase path: marks sent/failed by updating status column.
+// Fallback path: removes from PENDING_REMINDERS array on success.
+// Duplicate prevention: Supabase status='pending' guard; in-memory deduped by array removal.
 setInterval(async () => {
   const nowISO = DateTime.utc().toISO();
-  const due = PENDING_REMINDERS.filter((r) => r.fireAtISO <= nowISO);
-  if (!due.length) return;
 
-  const stillPending = [];
+  // ── Process Supabase reminders ─────────────────────────────────────────
+  let supabaseOk = false;
+  try {
+    const { data: dueRows, error: fetchErr } = await supabase
+      .from("reminders")
+      .select("*")
+      .eq("status", "pending")
+      .lte("fire_at", nowISO);  // fire_at <= now()
 
-  for (const r of due) {
-    try {
-      await sendEmail({
-        to: r.to,
-        subject: r.subject,
-        text: r.text,
-        html: r.html,
-      });
-      console.log("[REMINDER] sent to", r.to, "at", r.fireAtISO);
-    } catch (e) {
-      console.error("[REMINDER] send error:", e.message);
-      stillPending.push(r);
+    if (fetchErr) {
+      console.error("[REMINDER] Supabase fetch failed:", fetchErr.message,
+        "| Falling back to in-memory.");
+    } else {
+      supabaseOk = true;
+      for (const r of (dueRows ?? [])) {
+        try {
+          await sendEmail({
+            to:      r.to_email,
+            subject: r.subject,
+            text:    r.body_text,
+            html:    r.body_html,
+          });
+
+          // Mark as sent in Supabase
+          const { error: updateErr } = await supabase
+            .from("reminders")
+            .update({ status: "sent", sent_at: new Date().toISOString() })
+            .eq("id", r.id);
+
+          if (updateErr) {
+            console.error("[REMINDER] Failed to mark sent id=" + r.id, updateErr.message);
+          } else {
+            console.log("[REMINDER] Sent to", r.to_email, "fire_at", r.fire_at);
+          }
+        } catch (sendErr) {
+          // Mark as failed in Supabase — will not be retried automatically
+          const { error: failErr } = await supabase
+            .from("reminders")
+            .update({
+              status: "failed",
+              error:  sendErr.message,
+            })
+            .eq("id", r.id);
+
+          if (failErr) {
+            console.error("[REMINDER] Failed to mark failed id=" + r.id, failErr.message);
+          }
+          console.error("[REMINDER] Email failed for id=" + r.id,
+            "to=" + r.to_email, "—", sendErr.message);
+        }
+      }
     }
+  } catch (e) {
+    console.error("[REMINDER] Supabase worker exception:", e.message,
+      "| Falling back to in-memory.");
   }
 
-  const future = PENDING_REMINDERS.filter((r) => r.fireAtISO > nowISO);
-  PENDING_REMINDERS.length = 0;
-  PENDING_REMINDERS.push(...future, ...stillPending);
-  await saveRemindersToDisk(PENDING_REMINDERS);
+  // ── Fallback: process PENDING_REMINDERS if Supabase unavailable ────────
+  // Also runs if supabaseOk=false to ensure continuity during Supabase outages.
+  if (!supabaseOk) {
+    const due = PENDING_REMINDERS.filter((r) => r.fireAtISO <= nowISO);
+    if (!due.length) return;
+
+    const stillPending = [];
+    for (const r of due) {
+      try {
+        await sendEmail({
+          to: r.to,
+          subject: r.subject,
+          text: r.text,
+          html: r.html,
+        });
+        console.log("[REMINDER-FALLBACK] sent to", r.to, "at", r.fireAtISO);
+      } catch (e) {
+        console.error("[REMINDER-FALLBACK] send error:", e.message);
+        stillPending.push(r);
+      }
+    }
+
+    const future = PENDING_REMINDERS.filter((r) => r.fireAtISO > nowISO);
+    PENDING_REMINDERS.length = 0;
+    PENDING_REMINDERS.push(...future, ...stillPending);
+    await saveRemindersToDisk(PENDING_REMINDERS);
+  }
 }, 30_000);
 
 
@@ -1217,7 +2220,7 @@ app.get("/ambassador", async (req, res) => {
   const token = req.cookies?.[AMB_COOKIE];
   if (!token) return res.redirect("/ambassador/login");
   try {
-    jwt.verify(token, process.env.JWT_SECRET || "changeme");
+    jwt.verify(token, process.env.JWT_SECRET);
     res.sendFile("index.html", { root: AMBASSADOR_DIR }, (err) => {
       if (err) { console.error("[AMB] dash error:", err.message); res.redirect("/ambassador/login"); }
     });
@@ -1365,7 +2368,7 @@ app.get("/ambassador-program", (req, res) => {
 });
 
 // Public application submission
-app.post("/api/ambassador-apply", express.json(), async (req, res) => {
+app.post("/api/ambassador-apply", applyLimiter, express.json(), async (req, res) => {
   try {
     const { name, phone, email, age, city_state, has_sales_exp, reason, strategy, knows_owners, social_link, notes } = req.body || {};
     if (!name || !email) return res.status(400).json({ ok: false, error: "Name and email are required" });
@@ -1394,48 +2397,43 @@ app.put("/admin/api/ambassador-applications/:id", express.json(), verifyAdmin, a
 
 app.get("/ping", (req, res) => res.type("text").send("pong"));
 
-app.get("/env-check", async (req, res) => {
-  const groqKey = process.env.GROQ_API_KEY || "";
-  const model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
-  const masked = groqKey
-    ? groqKey.slice(0, 8) + "..." + groqKey.slice(-4)
-    : null;
-
-  let tenants = [];
-  try {
-    const files = await fs.readdir(TENANTS_DIR);
-    tenants = files
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => f.replace(".json", ""));
-  } catch {}
-
-  res.json({ hasKey: !!groqKey, model, sampleKey: masked, tenants });
-});
+// /env-check was removed in Phase 2C.
+// It previously exposed the full tenant slug list and a partial GROQ_API_KEY
+// fragment to any unauthenticated caller. No internal code referenced it.
 
 // =========================
 // Twilio SMS Webhook
 // =========================
-app.post("/sms", async (req, res) => {
+app.post("/sms", smsLimiter, verifyTwilioSignature("/sms"), async (req, res) => {
   try {
     const from = req.body.From || "";
     const to = req.body.To || "";
     const body = (req.body.Body || "").trim();
 
-    // tenant por query (?slug=demo). Si no hay, usa demo.
-    const slug = (req.query.slug || "demo").toString().toLowerCase().trim();
+    // Tenant resolved by the actual receiving Twilio number — no query-string
+    // dependency. This was previously `req.query.slug || "demo"`, which meant
+    // any tenant whose Twilio console wasn't manually configured with a
+    // "?slug=" suffix on the webhook URL silently landed in the demo tenant.
+    const slug = await getTenantByPhone(to);
 
-    // sessionId estable por número (para que recuerde el flujo)
+    // sessionId built AFTER tenant resolution so it's correctly scoped to the
+    // real tenant, not whatever the (now-removed) query param used to say.
     const sessionId = `sms_${slug}_${from}`;
 
-    const out = await runChat({ prompt: body, slug, sessionId });
-
-    const reply = out?.reply || "Ok";
+    const result = await handleInboundMessage({
+      channel: "sms",
+      from,
+      to,
+      tenantSlug: slug, // already resolved above — handleInboundMessage skips re-resolving
+      text: body,
+      sessionId,
+    });
 
     res
       .type("text/xml")
       .send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>${escapeXml(reply)}</Message>
+  <Message>${escapeXml(result.reply)}</Message>
 </Response>`);
   } catch (e) {
     console.error("[SMS] error:", e.message);
@@ -1449,7 +2447,9 @@ app.post("/sms", async (req, res) => {
 });
 
 
-app.get("/tenants/list", async (req, res) => {
+// /tenants/list — secured with verifyAdmin (STEP 3)
+// Previously exposed all customer slugs publicly. Now requires admin JWT.
+app.get("/tenants/list", verifyAdmin, async (req, res) => {
   try {
     const all = await fs.readdir(TENANTS_DIR);
     const list = all
@@ -1462,18 +2462,15 @@ app.get("/tenants/list", async (req, res) => {
   }
 });
 
-app.get("/api/session", (req, res) => {
+app.options("/api/session", widgetCors);
+app.get("/api/session", widgetCors, sessionLimiter, async (req, res) => {
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  // slug may be provided as query param so the session is tenant-bound from creation.
+  const slug = validateSlug(req.query.slug) || "demo";
 
-  sessions.set(id, {
-    history: [],
-    state: "IDLE",
-    draft: {},
-    lang: null,
-    pendingConfirmation: false,
-    pendingEmail: null,
-    cancelFlow: null,
-  });
+  const sess = defaultSession();
+  // saveSession writes to cache + Supabase and does not throw
+  await saveSession(id, slug, sess, "web");
 
   res.json({ sessionId: id });
 });
@@ -1660,7 +2657,7 @@ async function runChat({ prompt, slug, sessionId }) {
   const safeSlug = (slug || "demo").toString().toLowerCase().trim();
 
   // --- anti-repeat / anti-loop guard ---
-  const sess = getSession(sessionId);
+  const sess = await getSession(sessionId, safeSlug, "web");
   sess._repeat = sess._repeat || { last: "", count: 0 };
 
   const cleanPrompt = (prompt || "").trim().toLowerCase();
@@ -2554,16 +3551,24 @@ function escapeXml(s="") {
 
 
 // --- API: chat ---
-app.post("/api/chat", async (req, res) => {
+app.options("/api/chat", widgetCors);
+app.post("/api/chat", widgetCors, chatLimiter, async (req, res) => {
   try {
     const { client, slug, sessionId, prompt } = req.body || {};
     const tenantSlug = (slug || client || "demo").toString().toLowerCase().trim();
+    const sid = (sessionId || "anon").toString();
 
     const out = await runChat({
       prompt,
       slug: tenantSlug,
-      sessionId: (sessionId || "anon").toString(),
+      sessionId: sid,
     });
+
+    // Persist updated session state after runChat resolves.
+    const updatedSess = sessions.get(sid);
+    if (updatedSess) {
+      await saveSession(sid, tenantSlug, updatedSess.data, "web");
+    }
 
     return res.json(out);
   } catch (e) {
@@ -2576,6 +3581,59 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+
+// ─── STARTUP SECRET VALIDATION (STEP 4) ──────────────────────────────────────
+// The application will refuse to start if any required secret is missing or
+// still set to a known-weak default value. This prevents silent insecure deployments.
+(function validateRequiredSecrets() {
+  const errors = [];
+
+  // JWT_SECRET: required, must be at least 32 characters
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    errors.push("JWT_SECRET is not set.");
+  } else if (jwtSecret.length < 32) {
+    errors.push(`JWT_SECRET is too short (${jwtSecret.length} chars). Minimum 32 required.`);
+  } else if (["changeme", "secret", "password", "123456", "jwt_secret"].includes(jwtSecret.toLowerCase())) {
+    errors.push(`JWT_SECRET is set to a known-weak value: "${jwtSecret}". Use a random 64-char string.`);
+  }
+
+  // ADMIN_TOKEN: required, must be at least 32 characters
+  const adminToken = process.env.ADMIN_TOKEN;
+  if (!adminToken) {
+    errors.push("ADMIN_TOKEN is not set.");
+  } else if (adminToken.length < 32) {
+    errors.push(`ADMIN_TOKEN is too short (${adminToken.length} chars). Minimum 32 required.`);
+  } else if (["devtoken", "admin", "token", "secret"].includes(adminToken.toLowerCase())) {
+    errors.push(`ADMIN_TOKEN is set to a known-weak value: "${adminToken}".`);
+  }
+
+  // SUPABASE_URL and SUPABASE_SERVICE_KEY: required for auth
+  if (!process.env.SUPABASE_URL)        errors.push("SUPABASE_URL is not set.");
+  if (!process.env.SUPABASE_SERVICE_KEY) errors.push("SUPABASE_SERVICE_KEY is not set.");
+
+  // GROQ_API_KEY: required for AI
+  if (!process.env.GROQ_API_KEY) errors.push("GROQ_API_KEY is not set.");
+
+  // TWILIO_AUTH_TOKEN: required in production for webhook signature verification.
+  // Without it, /sms and /webhook/sms would have to accept unsigned requests —
+  // never allowed in production. Optional in dev so local testing works
+  // without a real Twilio account (verifyTwilioSignature bypasses when unset
+  // AND NODE_ENV !== "production").
+  if (process.env.NODE_ENV === "production" && !process.env.TWILIO_AUTH_TOKEN) {
+    errors.push("TWILIO_AUTH_TOKEN is not set. Required in production to verify SMS webhook signatures.");
+  }
+
+  if (errors.length > 0) {
+    console.error("\n[FATAL] Application startup blocked — required secrets are missing or insecure:");
+    errors.forEach(e => console.error("  ✗ " + e));
+    console.error("\nSet these environment variables and restart the application.\n");
+    process.exit(1);
+  }
+
+  console.log("[STARTUP] Secret validation passed ✓");
+})();
+// ──────────────────────────────────────────────────────────────────────────────
 
 // --- start ---
 const PORT = process.env.PORT || 3100;
@@ -2590,7 +3648,132 @@ app.listen(PORT, () => {
 // ============================================================
 // SMS TENANT ROUTER
 // ============================================================
+// ═══════════════════════════════════════════════════════════════════════════════
+// OMNICHANNEL COMMUNICATION CORE
+// ═══════════════════════════════════════════════════════════════════════════════
+// Single entry point for every inbound message, regardless of channel.
+// SMS calls this today. Voice, WhatsApp, and Instagram will call this exact
+// same function in future phases — none of them duplicate this logic.
+//
+// Each channel's route is responsible ONLY for:
+//   1. Parsing its own wire format (Twilio form fields, Meta webhook JSON, etc.)
+//   2. Calling handleInboundMessage() with a normalized payload
+//   3. Rendering its own reply format (TwiML, REST API call, JSON, etc.)
+// No tenant resolution, session handling, AI invocation, or logging may live
+// in a route handler — it all lives here, once.
+//
+// Params:
+//   channel    — "sms" | "whatsapp" | "voice" | "instagram" | "web" (future use)
+//   from       — the sender's identifier (phone number, social handle, etc.)
+//   to         — the receiving identifier (Twilio number, page ID, etc.)
+//   tenantSlug — if the caller already knows the tenant (e.g. web widget passes
+//                its own slug explicitly), pass it directly and tenant lookup
+//                is skipped. If omitted, resolved from `to` via getTenantByPhone().
+//   text       — the inbound message text
+//   sessionId  — caller-constructed, deterministic per conversation
+//                (e.g. `sms_${slug}_${from}`). Required.
+//   metadata   — optional, channel-specific extra data, not used by the core
+//                logic today but reserved for Voice (call SID, etc.)
+//
+// Returns: { reply, appointmentCreated, appointmentError, tenantSlug, sessionId }
+async function handleInboundMessage({ channel, from, to, tenantSlug, text, sessionId, metadata }) {
+  // ── 1. Resolve tenant ──────────────────────────────────────────────────
+  let slug = tenantSlug ? (validateSlug(tenantSlug) || "demo") : null;
+  if (!slug) {
+    slug = await getTenantByPhone(to || "");
+  }
+
+  // ── 2 & 3. Session + AI core ──────────────────────────────────────────
+  // runChat internally calls getSession(sessionId, slug, "web") — note it
+  // currently hardcodes "web" as the channel label regardless of caller.
+  // This is pre-existing behavior, out of scope for this refactor (it does
+  // not affect correctness today because getSession looks up purely by
+  // sessionId, not by channel). Flagged here, not fixed here — left for
+  // a future pass since changing runChat's internals was not requested.
+  const out = await runChat({ prompt: text, slug, sessionId });
+
+  // ── 4. Persist session ────────────────────────────────────────────────
+  // Mirrors the exact pattern already used by every existing channel caller:
+  // runChat mutates the cached session in place, then the caller re-reads
+  // the cache and writes it back to Supabase.
+  const updatedSess = sessions.get(sessionId);
+  if (updatedSess) {
+    await saveSession(sessionId, slug, updatedSess.data, channel);
+  }
+
+  // ── 5. Log the exchange ───────────────────────────────────────────────
+  // logSms() is generic enough for any text-based channel today (it just
+  // records from/to/direction pairs) — reused as-is for SMS and WhatsApp.
+  // Voice will need a separate transcript logger in Phase 2; that does not
+  // change this function's contract.
+  const reply = out?.reply || "Ok";
+  if (channel === "sms" || channel === "whatsapp") {
+    await logSms(slug, from, to, text, reply);
+  }
+
+  // ── 6. Normalized result ──────────────────────────────────────────────
+  return {
+    reply,
+    appointmentCreated: out?.appointmentCreated ?? false,
+    appointmentError: out?.appointmentError ?? null,
+    tenantSlug: slug,
+    sessionId,
+  };
+}
+// ═══════════════════════════════════════════════════════════════════════════════
+
 async function getTenantByPhone(toNumber) {
+  const normalised = toNumber.replace(/\D/g, '');
+  if (!normalised) return "demo";
+
+  // ── Try Supabase first — actually indexed this time ────────────────────
+  // ix_tenants_twilio_number covers the dedicated column. We try several
+  // normalized forms (raw digits, with/without a leading "1") since Twilio
+  // numbers and stored numbers may use different formats, and an indexed
+  // equality match only works if the formats line up exactly.
+  try {
+    const candidates = new Set([normalised]);
+    if (normalised.length === 11 && normalised.startsWith("1")) {
+      candidates.add(normalised.slice(1));      // 1XXXXXXXXXX -> XXXXXXXXXX
+    } else if (normalised.length === 10) {
+      candidates.add("1" + normalised);          // XXXXXXXXXX -> 1XXXXXXXXXX
+    }
+
+    for (const candidate of candidates) {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("slug")
+        .eq("twilio_number", candidate)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("[SMS ROUTER] Supabase indexed lookup failed, falling back:", error.message);
+        break; // stop trying Supabase, go straight to JSON fallback below
+      }
+      if (data) return data.slug;
+    }
+
+    // No row matched twilio_number directly — check the legacy vars.twilio_number
+    // location for tenants saved before the dedicated column existed.
+    // This is a narrower query than before (still not perfectly indexed,
+    // but only runs as a second-chance path, not on every single lookup).
+    const { data: legacyData, error: legacyError } = await supabase
+      .from("tenants")
+      .select("slug, vars")
+      .eq("is_active", true);
+
+    if (!legacyError && legacyData) {
+      for (const row of legacyData) {
+        const num = (row.vars?.twilio_number || "").replace(/\D/g, "");
+        if (num && num === normalised) return row.slug;
+      }
+    }
+  } catch (e) {
+    console.warn("[SMS ROUTER] Supabase exception, falling back to JSON:", e.message);
+  }
+
+  // ── Fallback: scan local JSON files ──────────────────────────────────
   try {
     const files = await fs.readdir(TENANTS_DIR);
     for (const file of files) {
@@ -2598,29 +3781,38 @@ async function getTenantByPhone(toNumber) {
       try {
         const raw = await fs.readFile(path.join(TENANTS_DIR, file), 'utf8');
         const cfg = JSON.parse(raw);
-        const num = (cfg.twilio_number || cfg.vars?.twilio_number || '').replace(/\D/g,'');
-        if (num && num === toNumber.replace(/\D/g,'')) return file.replace('.json','');
+        const num = (cfg.twilio_number || cfg.vars?.twilio_number || '').replace(/\D/g, '');
+        if (num && num === normalised) return file.replace('.json', '');
       } catch {}
     }
-  } catch(e) { console.error('[SMS ROUTER]', e.message); }
+  } catch(e) { console.error('[SMS ROUTER] JSON fallback error:', e.message); }
+
   return 'demo';
 }
 
-app.post("/webhook/sms", async (req, res) => {
+app.post("/webhook/sms", smsLimiter, verifyTwilioSignature("/webhook/sms"), async (req, res) => {
   try {
     const from = req.body.From || '';
     const to   = req.body.To   || '';
     const body = (req.body.Body || '').trim();
     if (!from || !body) return res.sendStatus(400);
     console.log(`[SMS] IN from=${from} to=${to}: ${body}`);
+
     const slug = await getTenantByPhone(to);
     console.log(`[SMS] Tenant: ${slug}`);
     const sessionId = `sms_${slug}_${from}`;
-    const out = await runChat({ prompt: body, slug, sessionId });
-    const reply = out?.reply || 'Ok';
-    await logSms(slug, from, to, body, reply);
+
+    const result = await handleInboundMessage({
+      channel: "sms",
+      from,
+      to,
+      tenantSlug: slug, // already resolved above — handleInboundMessage skips re-resolving
+      text: body,
+      sessionId,
+    });
+
     if (twilioClient) {
-      await twilioClient.messages.create({ from: to, to: from, body: reply });
+      await twilioClient.messages.create({ from: to, to: from, body: result.reply });
     }
     res.sendStatus(200);
   } catch(e) {
@@ -2628,6 +3820,268 @@ app.post("/webhook/sms", async (req, res) => {
     res.sendStatus(200);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TWILIO VOICE — Phase 2 of the Omnichannel Core
+// ═══════════════════════════════════════════════════════════════════════════════
+// All three routes below are thin adapters. None of them contain tenant
+// resolution, session, AI, appointment, or reminder logic — all of that
+// continues to live exclusively in handleInboundMessage(), exactly as SMS
+// already uses it. The only things unique to voice are: speech-to-text via
+// Twilio's <Gather>, text-to-speech via <Say>, and the small amount of
+// call-flow bookkeeping below (silence counting, goodbye detection,
+// transcript accumulation) needed to know when to keep listening vs. hang up.
+
+const VoiceResponse = twilio.twiml.VoiceResponse;
+
+// Per-call, in-memory bookkeeping only — NOT a replacement for chat_sessions.
+// The actual conversation memory (what was said, booking state, etc.) lives
+// in Supabase via getSession/saveSession inside runChat, same as every other
+// channel. This map only tracks two things call-flow logic needs that don't
+// belong in the persisted session: how many consecutive silent turns have
+// happened (so we know when to give up and hang up), and the transcript
+// turns accumulated so far (so /webhook/voice/status can log the whole call
+// even though no single webhook call sees the full conversation).
+// Cleared on call completion; never written to Supabase; safe to lose on
+// a redeploy mid-call (a dropped call mid-redeploy is an acceptable edge
+// case explicitly out of scope — Supabase session state itself still
+// survives, only this bookkeeping resets).
+const voiceCallState = new Map(); // CallSid -> { silenceCount, turns: [{role, text}] }
+
+const MAX_CONSECUTIVE_SILENCES = 2;
+const MAX_SAY_CHARS = 600; // defensive cap so a long AI reply doesn't produce
+                            // an excessively long, awkward spoken response or
+                            // risk Twilio's own TwiML size/duration limits.
+                            // Channel-specific rendering concern only — does
+                            // NOT alter runChat's actual reply text/logic.
+
+function getCallState(callSid) {
+  if (!voiceCallState.has(callSid)) {
+    voiceCallState.set(callSid, { silenceCount: 0, turns: [] });
+  }
+  return voiceCallState.get(callSid);
+}
+
+function isGoodbyeIntent(text = "") {
+  const s = text.toLowerCase();
+  return ["bye", "goodbye", "that's all", "thats all", "thank you bye",
+          "hang up", "no that's it", "no thats it", "that is all",
+          "adiós", "adios", "hasta luego", "eso es todo", "nada más", "nada mas"]
+    .some(phrase => s.includes(phrase));
+}
+
+// Defensive truncation for spoken output only — trims at a sentence boundary
+// where possible rather than cutting mid-word.
+function sayableText(text = "") {
+  const clean = String(text).trim();
+  if (clean.length <= MAX_SAY_CHARS) return clean;
+  const slice = clean.slice(0, MAX_SAY_CHARS);
+  const lastStop = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("! "), slice.lastIndexOf("? "));
+  return (lastStop > 100 ? slice.slice(0, lastStop + 1) : slice) + "...";
+}
+
+// Twilio's twiml.VoiceResponse SDK builder (used throughout this section)
+// escapes XML-significant characters internally on .say() — confirmed via
+// direct test, no manual escaping needed here, unlike the hand-built XML
+// strings the SMS routes construct.
+
+// ── POST /webhook/voice/incoming ─────────────────────────────────────────────
+// Twilio's required first webhook the moment someone dials the number.
+// No caller speech exists yet — handleInboundMessage is called with empty
+// text, which produces a greeting from the AI/tenant config exactly the way
+// an empty first message would on any other channel.
+app.post("/webhook/voice/incoming", voiceLimiter, verifyTwilioSignature("/webhook/voice/incoming", "voice"), async (req, res) => {
+  const twiml = new VoiceResponse();
+  try {
+    const from = req.body.From || "";
+    const to = req.body.To || "";
+    const callSid = req.body.CallSid || "";
+
+    if (!from || !callSid) {
+      twiml.say("Sorry, we could not process this call.");
+      twiml.hangup();
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    const slug = await getTenantByPhone(to);
+    const sessionId = `voice_${slug}_${from}_${callSid}`;
+    getCallState(callSid); // initialize bookkeeping for this call
+
+    // runChat rejects any falsy `prompt` immediately with a hardcoded
+    // "Missing 'prompt'" error (confirmed by direct test against the live
+    // function) — it has no built-in concept of "first turn, give a
+    // greeting." An empty string for the incoming-call greeting does NOT
+    // work, despite that being a reasonable assumption going in. Instead,
+    // send a real, non-empty opening phrase so the AI core treats this
+    // exactly like a normal first message — the same way a human caller's
+    // own "hello" would be handled.
+    const result = await handleInboundMessage({
+      channel: "voice",
+      from,
+      to,
+      tenantSlug: slug,
+      text: "Hello",
+      sessionId,
+      metadata: { callSid },
+    });
+
+    getCallState(callSid).turns.push({ role: "assistant", text: result.reply });
+
+    const gather = twiml.gather({
+      input: "speech",
+      action: "/webhook/voice/gather",
+      method: "POST",
+      speechTimeout: "auto",
+    });
+    gather.say(sayableText(result.reply));
+
+    // If <Gather> times out with zero speech captured, Twilio falls through
+    // to whatever comes after it — loop back into /gather rather than just
+    // hanging up on the very first silence.
+    twiml.redirect({ method: "POST" }, "/webhook/voice/gather");
+
+    res.type("text/xml").send(twiml.toString());
+  } catch (e) {
+    console.error("[VOICE/INCOMING] error:", e.message);
+    const errTwiml = new VoiceResponse();
+    errTwiml.say("Sorry, something went wrong. Please try again later.");
+    errTwiml.hangup();
+    res.type("text/xml").send(errTwiml.toString());
+  }
+});
+
+// ── POST /webhook/voice/gather ───────────────────────────────────────────────
+// Twilio posts here after every <Gather> completes — either with SpeechResult
+// populated (caller spoke) or empty (timeout / silence). This is the loop:
+// it always responds with either another <Gather> (continue the call) or a
+// <Say> + <Hangup> (end the call), never anything in between.
+app.post("/webhook/voice/gather", voiceLimiter, verifyTwilioSignature("/webhook/voice/gather", "voice"), async (req, res) => {
+  const twiml = new VoiceResponse();
+  try {
+    const from = req.body.From || "";
+    const to = req.body.To || "";
+    const callSid = req.body.CallSid || "";
+    const speech = (req.body.SpeechResult || "").trim();
+
+    if (!from || !callSid) {
+      twiml.say("Sorry, we lost track of this call.");
+      twiml.hangup();
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    const state = getCallState(callSid);
+
+    // ── Silence handling ────────────────────────────────────────────────
+    if (!speech) {
+      state.silenceCount += 1;
+      if (state.silenceCount > MAX_CONSECUTIVE_SILENCES) {
+        const closing = "I didn't hear anything, so I'll let you go for now. Feel free to call back anytime. Goodbye!";
+        state.turns.push({ role: "assistant", text: closing });
+        twiml.say(closing);
+        twiml.hangup();
+        await finalizeVoiceCall(callSid, await getTenantByPhone(to), from, to);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // Not yet at the limit — prompt again without involving the AI core
+      // (there is no new user input to send to it).
+      const reprompt = "Sorry, I didn't catch that. Could you say that again?";
+      const gather = twiml.gather({
+        input: "speech",
+        action: "/webhook/voice/gather",
+        method: "POST",
+        speechTimeout: "auto",
+      });
+      gather.say(reprompt);
+      twiml.redirect({ method: "POST" }, "/webhook/voice/gather");
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    // Caller spoke — reset the silence counter.
+    state.silenceCount = 0;
+    state.turns.push({ role: "user", text: speech });
+
+    const slug = await getTenantByPhone(to);
+    const sessionId = `voice_${slug}_${from}_${callSid}`;
+
+    const result = await handleInboundMessage({
+      channel: "voice",
+      from,
+      to,
+      tenantSlug: slug,
+      text: speech,
+      sessionId,
+      metadata: { callSid },
+    });
+
+    state.turns.push({ role: "assistant", text: result.reply });
+
+    // ── Goodbye / end-call intent ───────────────────────────────────────
+    if (isGoodbyeIntent(speech)) {
+      twiml.say(sayableText(result.reply));
+      twiml.hangup();
+      await finalizeVoiceCall(callSid, slug, from, to);
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    // ── Continue the conversation ───────────────────────────────────────
+    const gather = twiml.gather({
+      input: "speech",
+      action: "/webhook/voice/gather",
+      method: "POST",
+      speechTimeout: "auto",
+    });
+    gather.say(sayableText(result.reply));
+    twiml.redirect({ method: "POST" }, "/webhook/voice/gather");
+
+    res.type("text/xml").send(twiml.toString());
+  } catch (e) {
+    console.error("[VOICE/GATHER] error:", e.message);
+    const errTwiml = new VoiceResponse();
+    errTwiml.say("Sorry, something went wrong on our end. Goodbye.");
+    errTwiml.hangup();
+    res.type("text/xml").send(errTwiml.toString());
+  }
+});
+
+// ── POST /webhook/voice/status ───────────────────────────────────────────────
+// Twilio's call status callback — fires when the call ends for ANY reason,
+// including the caller hanging up first (which /gather never sees, since
+// no further webhook fires in that case). This is the only reliable place
+// to guarantee the transcript gets logged for every call, not just the ones
+// that end via our own <Hangup>.
+// No TwiML response expected or sent — Twilio does not act on this response.
+app.post("/webhook/voice/status", voiceLimiter, verifyTwilioSignature("/webhook/voice/status", "voice"), async (req, res) => {
+  try {
+    const from = req.body.From || "";
+    const to = req.body.To || "";
+    const callSid = req.body.CallSid || "";
+    const callStatus = req.body.CallStatus || "";
+
+    console.log(`[VOICE/STATUS] CallSid=${callSid} status=${callStatus}`);
+
+    if (callSid && voiceCallState.has(callSid)) {
+      const slug = await getTenantByPhone(to);
+      await finalizeVoiceCall(callSid, slug, from, to);
+    }
+
+    res.sendStatus(200);
+  } catch (e) {
+    console.error("[VOICE/STATUS] error:", e.message);
+    res.sendStatus(200); // Twilio expects 200 regardless — never surface our own error to it
+  }
+});
+
+// Writes the accumulated transcript for a call and clears its in-memory
+// bookkeeping. Idempotent-safe: if /gather already finalized the call (via
+// its own <Hangup> path) and /status fires afterward for the same CallSid,
+// the second call finds nothing left in voiceCallState and does nothing.
+async function finalizeVoiceCall(callSid, slug, from, to) {
+  const state = voiceCallState.get(callSid);
+  if (!state) return; // already finalized, or call never produced any turns
+  await logVoiceTranscript(slug, callSid, from, to, state.turns);
+  voiceCallState.delete(callSid);
+}
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // ============================================================
 // LANDING CHAT

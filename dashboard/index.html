@@ -202,6 +202,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 async function loadClients() {
   try {
     const res = await fetch('/admin/api/tenants', {credentials:'include'});
+if (res.status === 401) { window.location.href = '/login'; return; }
+if (!(res.headers.get('content-type') || '').includes('application/json')) { window.location.href = '/login'; return; }
     const d = await res.json();
     if (!d.tenants) { window.location.href = '/login'; return; }
     const clients = d.tenants;

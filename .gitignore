@@ -1,0 +1,28 @@
+# Secrets — never commit
+.env
+.env.*
+
+# Dependencies
+node_modules/
+
+# Runtime logs
+logs/
+*.log
+*.tmp
+
+# Backup files — all patterns
+*.backup-*
+index.backup*
+package.backup*
+dashboard/index.backup*
+auth/*.backup*
+tenants/*.backup*
+
+# Temporary dev/fix scripts
+add_*.py
+fix_*.py
+fix_*.cjs
+
+# Runtime data directories (ephemeral on Render)
+pending/
+appointments/

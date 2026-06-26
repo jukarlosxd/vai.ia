@@ -1,7 +1,15 @@
 // auth/jwt.js
 import jwt from "jsonwebtoken";
 
-const SECRET = process.env.JWT_SECRET || "changeme";
+// JWT_SECRET is required. Application will not start without it (enforced in index.js).
+// No fallback is provided here — an undefined SECRET causes jwt.sign/verify to throw,
+// which is safer than silently using a known-weak secret.
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) {
+  // This path is reached if jwt.js is imported before startup validation runs.
+  // Throwing here provides a second line of defence.
+  throw new Error("[FATAL] JWT_SECRET environment variable is not set. Refusing to start.");
+}
 const COOKIE = process.env.COOKIE_NAME || "aidash";
 const SECURE = process.env.COOKIE_SECURE === "1";
 
@@ -16,12 +24,20 @@ export function signAdmin(user) {
 
 export function verifyAdmin(req, res, next) {
   const token = req.cookies?.[COOKIE];
-  if (!token) return res.redirect("/login");
+  // API routes are called via fetch() — a redirect response causes the fetch to follow
+  // to /login (HTML), then res.json() throws "Unexpected token", showing "connection error".
+  // Return 401 JSON for API paths so the frontend can handle auth failure cleanly.
+  const isApi = (req.originalUrl || req.url || "").includes("/api/");
+  if (!token) {
+    if (isApi) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    return res.redirect("/login");
+  }
   try {
     req.admin = jwt.verify(token, SECRET);
     next();
   } catch {
     res.clearCookie(COOKIE);
+    if (isApi) return res.status(401).json({ ok: false, error: "Session expired" });
     return res.redirect("/login");
   }
 }

@@ -1,4 +1,4 @@
-﻿{
+{
     "system":  "You are a helpful AI receptionist for this business. Answer clearly, be polite, and help customers with questions and appointments.",
     "vars":  {
                  "business":  "Demo Business",

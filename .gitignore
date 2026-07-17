@@ -1,6 +1,7 @@
 # Secrets — never commit
 .env
 .env.*
+.env.staging
 
 # Dependencies
 node_modules/
@@ -26,3 +27,4 @@ fix_*.cjs
 # Runtime data directories (ephemeral on Render)
 pending/
 appointments/
+assistant-data/

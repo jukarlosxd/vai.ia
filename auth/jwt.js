@@ -64,8 +64,12 @@ export function signClient(payload, remember = false) {
 
 export function verifyClient(req, res, next) {
   const token = req.cookies?.[CLIENT_COOKIE];
+  // Same rationale as verifyAdmin above: API calls come from fetch(), where a
+  // 302 to the login HTML breaks res.json() parsing. Return 401 JSON instead.
+  const isApi = (req.originalUrl || req.url || "").includes("/api/");
   if (!token) {
     if (req.path === "/login" || req.path === "/auth/login") return next();
+    if (isApi) return res.status(401).json({ ok: false, error: "Unauthorized" });
     return res.redirect("/client/login");
   }
   try {
@@ -73,6 +77,7 @@ export function verifyClient(req, res, next) {
     next();
   } catch {
     res.clearCookie(CLIENT_COOKIE);
+    if (isApi) return res.status(401).json({ ok: false, error: "Session expired" });
     return res.redirect("/client/login");
   }
 }

@@ -19,6 +19,7 @@
 import path from "path";
 import { promises as fs } from "fs";
 import crypto from "crypto";
+import { buildLocalBlockInterval } from "./auth/runtime-config.js";
 
 // ─── injected dependencies (set by mountBusinessAssistant) ──────────────────
 let D = null; // { supabase, groq, verifyClient, loadTenant, loadAppointments,
@@ -457,22 +458,20 @@ const TOOLS = {
 
   find_affected_appointments: {
     risk: RISK.PREPARE,
-    description: "Find appointments that fall inside a time interval (used before creating an availability block). Times are ISO with offset or business-local 'YYYY-MM-DDTHH:mm'.",
+    description: "Find appointments inside a time window (used before creating an availability block). Provide LOCAL business time as separate fields: date 'YYYY-MM-DD', start_time 'HH:mm', end_time 'HH:mm'. Do NOT include any timezone, 'Z', or offset — the backend applies the tenant's timezone.",
     parameters: {
       type: "object",
       properties: {
-        starts_at: { type: "string" },
-        ends_at: { type: "string" },
+        date: { type: "string", description: "YYYY-MM-DD (tenant local, no timezone)" },
+        start_time: { type: "string", description: "HH:mm 24h (tenant local, no timezone)" },
+        end_time: { type: "string", description: "HH:mm 24h (tenant local, no timezone)" },
       },
-      required: ["starts_at", "ends_at"],
+      required: ["date", "start_time", "end_time"],
     },
     async run(ctx, p) {
-      const iv = parseInterval(p.starts_at, p.ends_at, ctx.tz);
-      if (iv.error) return iv;
-      const list = (await D.loadAppointments(ctx.slug)).filter(a => {
-        const s = Date.parse(a.start), e = Date.parse(a.end);
-        return !Number.isNaN(s) && !Number.isNaN(e) && overlaps(s, e, iv.startMs, iv.endMs);
-      }).slice(0, MAX_RESULTS);
+      const iv = buildLocalBlockInterval(D.DateTime, ctx.tz, p.date, p.start_time, p.end_time);
+      if (!iv.ok) return { error: iv.error, message: iv.message };
+      const list = computeAffectedAppointments(await D.loadAppointments(ctx.slug), iv.startMs, iv.endMs).slice(0, MAX_RESULTS);
       return {
         interval: { starts_at: iv.startISO, ends_at: iv.endISO },
         affected_count: list.length,
@@ -483,24 +482,27 @@ const TOOLS = {
 
   create_availability_block: {
     risk: RISK.CONFIRM, // escalated to STRONG_CONFIRM by impact
-    description: "Propose blocking a time interval so no new bookings can be made. Creates a PENDING action — nothing changes until the owner confirms in the UI. internal_reason is private; public_reason (optional) is what customers may see.",
+    description: "Propose blocking a time window so no new bookings can be made. Provide LOCAL business time as separate fields: date 'YYYY-MM-DD', start_time 'HH:mm', end_time 'HH:mm'. Do NOT include any timezone, 'Z', or offset — the backend applies the tenant's timezone. Creates a PENDING action — nothing changes until the owner confirms in the UI. internal_reason is private; public_reason (optional) is what customers may see.",
     parameters: {
       type: "object",
       properties: {
-        starts_at: { type: "string" },
-        ends_at: { type: "string" },
+        date: { type: "string", description: "YYYY-MM-DD (tenant local, no timezone)" },
+        start_time: { type: "string", description: "HH:mm 24h (tenant local, no timezone)" },
+        end_time: { type: "string", description: "HH:mm 24h (tenant local, no timezone)" },
         internal_reason: { type: "string" },
         public_reason: { type: "string" },
       },
-      required: ["starts_at", "ends_at"],
+      required: ["date", "start_time", "end_time"],
     },
     async prepare(ctx, p) {
-      const iv = parseInterval(p.starts_at, p.ends_at, ctx.tz);
-      if (iv.error) return { toolResult: iv };
-      const affected = (await D.loadAppointments(ctx.slug)).filter(a => {
-        const s = Date.parse(a.start), e = Date.parse(a.end);
-        return !Number.isNaN(s) && !Number.isNaN(e) && overlaps(s, e, iv.startMs, iv.endMs);
-      });
+      // The model supplies only LOCAL wall-clock fields; the backend applies the
+      // tenant timezone deterministically. Offsets/Z/ISO are rejected (never
+      // silently stripped), so "20:00Z" can't be misread as 20:00 local.
+      const iv = buildLocalBlockInterval(D.DateTime, ctx.tz, p.date, p.start_time, p.end_time);
+      if (!iv.ok) return { toolResult: { error: iv.error, message: iv.message } };
+      // Backend computes the affected appointments deterministically — the model
+      // only supplied the requested interval, never the impact count.
+      const affected = computeAffectedAppointments(await D.loadAppointments(ctx.slug), iv.startMs, iv.endMs);
       const hours = (iv.endMs - iv.startMs) / 3600000;
       const risk = (affected.length >= 3 || hours > 24) ? RISK.STRONG_CONFIRM : RISK.CONFIRM;
       return {
@@ -509,6 +511,8 @@ const TOOLS = {
           exception_type: hours >= 24 ? (hours > 24 ? "multi_day" : "full_day") : "block",
           internal_reason: p.internal_reason || null,
           public_reason: p.public_reason || null,
+          // snapshot of impact at proposal time — used to detect schedule drift
+          affected_count_at_propose: affected.length,
         },
         impact: { affected_count: affected.length, affected: affected.slice(0, 10).map(a => apptCard(a, ctx.tz)), hours },
         risk,
@@ -526,13 +530,25 @@ const TOOLS = {
       if (existing.some(b => b.starts_at === p.starts_at && b.ends_at === p.ends_at)) {
         return { ok: true, deduped: true, message: "Identical block already active." };
       }
+      // Recompute the impact against the CURRENT schedule. If the number of
+      // affected appointments changed since the proposal was created, do NOT
+      // execute silently — surface the drift so the owner can re-confirm.
+      const startMs = Date.parse(p.starts_at), endMs = Date.parse(p.ends_at);
+      const nowAffected = computeAffectedAppointments(await D.loadAppointments(ctx.slug), startMs, endMs);
+      const proposed = p.affected_count_at_propose;
+      if (typeof proposed === "number" && nowAffected.length !== proposed) {
+        return {
+          ok: false, error_code: "SCHEDULE_CHANGED",
+          message: `The schedule changed since this was proposed (was ${proposed} affected, now ${nowAffected.length}). Please review and confirm again.`,
+        };
+      }
       const row = await repoAddBlock(ctx.slug, {
         starts_at: p.starts_at, ends_at: p.ends_at,
         exception_type: p.exception_type || "block",
         internal_reason: p.internal_reason, public_reason: p.public_reason,
         scope: "one_time", created_by: ctx.userEmail,
       });
-      return { ok: true, block_id: row.id };
+      return { ok: true, block_id: row.id, affected_count: nowAffected.length };
     },
   },
 
@@ -725,17 +741,26 @@ const TOOLS = {
   },
 };
 
-function parseInterval(startsRaw, endsRaw, tz) {
-  const { DateTime } = D;
-  const s = DateTime.fromISO(startsRaw, { zone: tz });
-  const e = DateTime.fromISO(endsRaw, { zone: tz });
-  if (!s.isValid || !e.isValid) return { error: "AMBIGUOUS_DATE", message: "invalid starts_at/ends_at" };
-  if (e <= s) return { error: "VALIDATION_ERROR", message: "ends_at must be after starts_at" };
-  if (e.diff(s, "days").days > 14) return { error: "VALIDATION_ERROR", message: "interval too long (max 14 days)" };
-  return {
-    startISO: s.toUTC().toISO(), endISO: e.toUTC().toISO(),
-    startMs: s.toUTC().toMillis(), endMs: e.toUTC().toMillis(),
-  };
+// Availability-block time parsing lives in auth/runtime-config.js
+// (buildLocalBlockInterval): the model provides separate LOCAL fields
+// (date/start_time/end_time), the backend applies the tenant timezone, and any
+// offset/Z/ISO value is REJECTED — never silently stripped.
+
+// DETERMINISTIC overlap detection between a block interval [startMs,endMs) and
+// the tenant's ACTIVE appointments. The model never supplies the affected
+// count — the backend computes it from real timestamps. Cancelled appointments
+// (confirmed === false is "pending", not cancelled; we treat a truthy
+// `cancelled` flag or status as excluded) and any row without a valid interval
+// are ignored. loadAppointments is already tenant-scoped, so cross-tenant rows
+// can never appear here.
+function computeAffectedAppointments(list, startMs, endMs) {
+  return (list || []).filter(a => {
+    if (a?.cancelled === true || a?.status === "cancelled") return false;
+    const s = Date.parse(a.start), e = Date.parse(a.end);
+    if (Number.isNaN(s) || Number.isNaN(e)) return false;
+    return overlaps(s, e, startMs, endMs); // covers start-inside, end-inside,
+                                            // appt-contains-block, block-contains-appt
+  });
 }
 
 function normalizeE164(raw) {
@@ -787,6 +812,50 @@ function toolDefs() {
   }));
 }
 
+// Model resolution for the Business Assistant orchestrator.
+// Priority: BUSINESS_ASSISTANT_GROQ_MODEL → GROQ_MODEL → robust tool-calling
+// default. The public receptionist keeps using its own GROQ_MODEL default and
+// is NOT affected by this. 8b-instant is deliberately avoided here because it
+// frequently emits malformed tool calls (tool_use_failed) for write tools.
+function baModel() {
+  return process.env.BUSINESS_ASSISTANT_GROQ_MODEL
+      || process.env.GROQ_MODEL
+      || "llama-3.3-70b-versatile";
+}
+
+// Detect Groq's tool_use_failed (malformed tool call). Groq surfaces it as a
+// 400 APIError with code "tool_use_failed".
+function isToolUseFailed(err) {
+  const code = err?.error?.error?.code || err?.error?.code || err?.code;
+  const msg = String(err?.message || "");
+  return code === "tool_use_failed" || /tool_use_failed/i.test(msg);
+}
+
+// One controlled retry with stricter instructions when the model emits a
+// malformed tool call. No loops, no invented arguments — if the retry also
+// fails, the caller falls back to the neutral message and NO action is created.
+async function groqToolCompletion(messages) {
+  try {
+    return await D.groq.chat.completions.create({
+      model: baModel(), messages, tools: toolDefs(),
+      tool_choice: "auto", temperature: 0.2, max_tokens: 700,
+    });
+  } catch (e) {
+    if (!isToolUseFailed(e)) throw e;
+    console.error("[BA] tool_use_failed — one controlled retry with stricter instructions");
+    const stricter = messages.concat([{
+      role: "system",
+      content: "Your previous tool call was malformed. If you call a tool, emit ONLY a valid structured tool call using the provided function schema — no prose, no <function> tags, correct JSON arguments. If you cannot, answer in plain text without calling a tool.",
+    }]);
+    // If the retry still fails, this throws and the route returns the neutral
+    // message; crucially, no pending action was created from bad data.
+    return await D.groq.chat.completions.create({
+      model: baModel(), messages: stricter, tools: toolDefs(),
+      tool_choice: "auto", temperature: 0.1, max_tokens: 700,
+    });
+  }
+}
+
 async function runAssistant(ctx, conversationId, userText) {
   const history = await repoGetMessages(ctx.slug, conversationId, MAX_HISTORY_TO_MODEL * 2);
   const messages = [
@@ -803,14 +872,7 @@ async function runAssistant(ctx, conversationId, userText) {
   let toolCallCount = 0;
 
   for (let loop = 0; loop < MAX_LOOPS; loop++) {
-    const completion = await D.groq.chat.completions.create({
-      model: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
-      messages,
-      tools: toolDefs(),
-      tool_choice: "auto",
-      temperature: 0.2,
-      max_tokens: 700,
-    });
+    const completion = await groqToolCompletion(messages);
 
     const msg = completion.choices?.[0]?.message;
     if (!msg) throw new Error("empty model response");
@@ -898,7 +960,7 @@ async function runAssistant(ctx, conversationId, userText) {
 
   // loop budget exhausted — ask model for final answer without tools
   const final = await D.groq.chat.completions.create({
-    model: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
+    model: baModel(),
     messages, temperature: 0.2, max_tokens: 500,
   });
   return { text: (final.choices?.[0]?.message?.content || "").trim() || "…", pendingAction, cards };

@@ -86,8 +86,22 @@ Sin la migración aplicada, todo funciona con el fallback JSON (`assistant-data/
 
 ## Variables de entorno
 
-Existentes: `GROQ_API_KEY`, `GROQ_MODEL` (opcional), `JWT_SECRET`, `TWILIO_*`, `SUPABASE_*`.
-Nueva (solo dev/test, opcional): `BUSINESS_ASSISTANT_ALLOW_FILE_STORAGE=true` habilita el fallback JSON local. Sin efecto en producción (siempre deshabilitado).
+Existentes: `GROQ_API_KEY`, `GROQ_MODEL` (opcional), `JWT_SECRET`, `SUPABASE_*`.
+- `BUSINESS_ASSISTANT_GROQ_MODEL` (opcional): modelo del orquestador del BA. Prioridad `BUSINESS_ASSISTANT_GROQ_MODEL` → `GROQ_MODEL` → default `llama-3.3-70b-versatile` (robusto para tool-calling). No cambia el modelo del recepcionista público. El default 8b-instant se evita aquí porque produce `tool_use_failed` en herramientas de escritura.
+- `BUSINESS_ASSISTANT_ALLOW_FILE_STORAGE=true` (solo dev/test): habilita el fallback JSON local. Sin efecto en producción.
+- `TWILIO_ENABLED=true|false`: habilita el canal Twilio (SMS/Voice). Si no se define, se deduce `true` solo cuando existe la config completa (`TWILIO_ACCOUNT_SID`+`TWILIO_AUTH_TOKEN`). Con el canal deshabilitado el servidor arranca sin Twilio (ningún placeholder); habilitado con config parcial es error de arranque.
+
+## Robustez del tool-calling
+
+Si Groq devuelve `tool_use_failed` (tool call malformado), el orquestador hace **un** reintento controlado con instrucciones más estrictas y `temperature` menor. Si el segundo intento también falla, responde con el mensaje neutral y **no** crea ninguna acción a partir de datos incompletos. Sin loops, sin argumentos inventados.
+
+## Cálculo determinista de citas afectadas
+
+Las herramientas de disponibilidad (`create_availability_block`, `find_affected_appointments`) reciben **tiempo local en campos separados**: `date` (`YYYY-MM-DD`), `start_time` (`HH:mm`), `end_time` (`HH:mm`). El modelo **nunca** entrega zona horaria. El backend (`buildLocalBlockInterval` en `auth/runtime-config.js`) aplica la zona del **tenant autenticado** y construye los timestamps reales de forma determinista. Cualquier `Z`, offset (`±HH:mm`), nombre de zona o ISO completo en los campos de hora se **rechaza** (nunca se elimina silenciosamente), de modo que `20:00Z` no puede reinterpretarse como 20:00 local. Los huecos de horario de verano (hora inexistente) devuelven `AMBIGUOUS_DATE`.
+
+El solapamiento se calcula con timestamps reales — cubre cita-empieza-dentro, cita-termina-dentro, cita-contiene-bloqueo, bloqueo-contiene-cita, límites exactos — y excluye canceladas y otros tenants (`loadAppointments` está scoped por tenant). Antes de ejecutar el bloqueo se **recalcula** el impacto; si cambió desde la propuesta, devuelve `SCHEDULE_CHANGED` y no ejecuta silenciosamente.
+
+La función `resolveTwilioConfiguration` (`auth/runtime-config.js`) es la **única** fuente de la decisión de habilitación de Twilio, importada tanto por `index.js` como por `tests/twilio-gating.test.mjs` (el test ejercita el código real, no una copia).
 
 ## Pruebas
 

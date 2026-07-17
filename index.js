@@ -30,6 +30,7 @@ import Groq from "groq-sdk";
 import crypto from "crypto";
 import twilio from "twilio";
 import { mountBusinessAssistant, getActiveBlockIntervals } from "./business-assistant.js";
+import { resolveTwilioConfiguration } from "./auth/runtime-config.js";
 import {
   signAdmin,
   verifyAdmin,
@@ -107,9 +108,16 @@ function assertPathSafe(resolvedPath, baseDir) {
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // --- Twilio ---
+// The Twilio (SMS/Voice) channel is OPTIONAL. Its configuration is resolved by
+// the shared pure helper resolveTwilioConfiguration() (auth/runtime-config.js),
+// which both this file and the test suite import — so tests exercise the real
+// decision logic. When disabled, no client is created and no placeholder token
+// is needed; SMS/Voice routes simply report the channel is unavailable.
+const twilioConfig = resolveTwilioConfiguration(process.env);
+
 const twilioClient =
-  process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
-    ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  twilioConfig.enabled && twilioConfig.valid
+    ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
     : null;
 
 // ─── TWILIO SIGNATURE VERIFICATION ──────────────────────────────────────────────
@@ -3639,14 +3647,11 @@ app.post("/api/chat", widgetCors, chatLimiter, async (req, res) => {
   // GROQ_API_KEY: required for AI
   if (!process.env.GROQ_API_KEY) errors.push("GROQ_API_KEY is not set.");
 
-  // TWILIO_AUTH_TOKEN: required in production for webhook signature verification.
-  // Without it, /sms and /webhook/sms would have to accept unsigned requests —
-  // never allowed in production. Optional in dev so local testing works
-  // without a real Twilio account (verifyTwilioSignature bypasses when unset
-  // AND NODE_ENV !== "production").
-  if (process.env.NODE_ENV === "production" && !process.env.TWILIO_AUTH_TOKEN) {
-    errors.push("TWILIO_AUTH_TOKEN is not set. Required in production to verify SMS webhook signatures.");
-  }
+  // TWILIO: validated by the shared resolveTwilioConfiguration() helper. An
+  // enabled channel with a partial config (or an ambiguous TWILIO_ENABLED
+  // value) is a hard startup error — never a silent half-setup or placeholder.
+  // When the channel is disabled the server starts without Twilio.
+  for (const e of twilioConfig.errors) errors.push(e);
 
   if (errors.length > 0) {
     console.error("\n[FATAL] Application startup blocked — required secrets are missing or insecure:");
@@ -4109,14 +4114,10 @@ app.post("/webhook/voice/status", voiceLimiter, verifyTwilioSignature("/webhook/
     res.sendStatus(200);
   } catch (e) {
     console.error("[VOICE/STATUS] error:", e.message);
-    res.sendStatus(200); // Twilio expects 200 regardless — never surface our own error to it
+    res.sendStatus(200); 
   }
 });
 
-// Writes the accumulated transcript for a call and clears its in-memory
-// bookkeeping. Idempotent-safe: if /gather already finalized the call (via
-// its own <Hangup> path) and /status fires afterward for the same CallSid,
-// the second call finds nothing left in voiceCallState and does nothing.
 async function finalizeVoiceCall(callSid, slug, from, to) {
   const state = voiceCallState.get(callSid);
   if (!state) return; // already finalized, or call never produced any turns

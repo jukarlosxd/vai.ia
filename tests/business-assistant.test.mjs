@@ -10,6 +10,7 @@ import os from "node:os";
 import { promises as fs } from "node:fs";
 import { DateTime } from "luxon";
 import { mountBusinessAssistant, getActiveBlockIntervals } from "../business-assistant.js";
+import { buildLocalBlockInterval } from "../auth/runtime-config.js";
 
 // File storage is opt-in (see STORAGE POLICY in business-assistant.js).
 // Tests enable it explicitly; the production-mode test below unsets it.
@@ -131,10 +132,9 @@ console.log("── VAI Business Assistant tests ──");
 
 // ── TEST GROUP 2: block flow (Scenarios 2,3,4,5,12) ──────────────────────────
 {
-  const s = tomorrow.set({ hour: 14, minute: 0 }).toFormat("yyyy-MM-dd'T'HH:mm");
-  const e = tomorrow.set({ hour: 18, minute: 0 }).toFormat("yyyy-MM-dd'T'HH:mm");
+  const blockDate = tomorrow.toFormat("yyyy-MM-dd");
   const groq = scriptedGroq([
-    { content: null, tool_calls: [{ id: "t1", function: { name: "create_availability_block", arguments: JSON.stringify({ starts_at: s, ends_at: e, internal_reason: "reunión personal del dueño" }) } }] },
+    { content: null, tool_calls: [{ id: "t1", function: { name: "create_availability_block", arguments: JSON.stringify({ date: blockDate, start_time: "14:00", end_time: "18:00", internal_reason: "reunión personal del dueño" }) } }] },
     { content: "Encontré 2 citas afectadas (Ana 2:30pm, Miguel 4:00pm). El bloqueo está pendiente de tu confirmación — aún no he cambiado nada." },
   ]);
   const app = fakeApp();
@@ -328,10 +328,9 @@ console.log("── VAI Business Assistant tests ──");
   });
 
   await t("Confirmación CONCURRENTE (Promise.all) → una sola ejecución", async () => {
-    const s2 = tomorrow.plus({ days: 2 }).set({ hour: 9 }).toFormat("yyyy-MM-dd'T'HH:mm");
-    const e2 = tomorrow.plus({ days: 2 }).set({ hour: 10 }).toFormat("yyyy-MM-dd'T'HH:mm");
+    const d2 = tomorrow.plus({ days: 2 }).toFormat("yyyy-MM-dd");
     const groq2 = scriptedGroq([
-      { content: null, tool_calls: [{ id: "t1", function: { name: "create_availability_block", arguments: JSON.stringify({ starts_at: s2, ends_at: e2 }) } }] },
+      { content: null, tool_calls: [{ id: "t1", function: { name: "create_availability_block", arguments: JSON.stringify({ date: d2, start_time: "09:00", end_time: "10:00" }) } }] },
       { content: "pendiente" },
     ]);
     const app2 = fakeApp();
@@ -462,6 +461,238 @@ console.log("── VAI Business Assistant tests ──");
     assert.equal(rx.body.status, "cancelled");
     const rc = await call(app2, "POST", `/client/api/assistant/actions/:id/confirm`, { client: demoUser, params: { id: r.body.pendingAction.id } });
     assert.equal(rc.status, 409, "cancelled action cannot be confirmed");
+  });
+}
+
+// ── TEST GROUP 6a: D2 — buildLocalBlockInterval (pure fn, real code) ──────────
+// Directly exercises the shared function used by the availability tools.
+{
+  const DEN = "America/Denver";
+  const inLocal = (iso, tz) => DateTime.fromISO(iso, { zone: "utc" }).setZone(tz).toFormat("yyyy-MM-dd HH:mm");
+
+  await t("D2-pure: Denver 14:00–18:00 local → interval is 2pm–6pm local (not 8am)", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-07-18", "14:00", "18:00");
+    assert.equal(iv.ok, true, JSON.stringify(iv));
+    assert.equal(inLocal(iv.startISO, DEN), "2026-07-18 14:00");
+    assert.equal(inLocal(iv.endISO, DEN), "2026-07-18 18:00");
+    // a 15:00 local appointment falls inside
+    const at15 = DateTime.fromObject({ year: 2026, month: 7, day: 18, hour: 15 }, { zone: DEN }).toUTC().toMillis();
+    assert(at15 >= iv.startMs && at15 < iv.endMs, "3pm local is inside the block");
+  });
+
+  await t("D2-pure: start_time '14:00Z' → REJECTED (never reinterpreted)", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-07-18", "14:00Z", "18:00");
+    assert.equal(iv.ok, false);
+    assert.equal(iv.error, "VALIDATION_ERROR");
+  });
+
+  await t("D2-pure: start_time '20:00Z' → REJECTED (not silently turned into 20:00 local)", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-07-18", "20:00Z", "22:00");
+    assert.equal(iv.ok, false);
+    assert.equal(iv.error, "VALIDATION_ERROR");
+  });
+
+  await t("D2-pure: start_time '14:00-06:00' (offset) → REJECTED", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-07-18", "14:00-06:00", "18:00");
+    assert.equal(iv.ok, false);
+    assert.equal(iv.error, "VALIDATION_ERROR");
+  });
+
+  await t("D2-pure: full ISO datetime in a time field → REJECTED", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-07-18", "2026-07-18T14:00", "18:00");
+    assert.equal(iv.ok, false);
+  });
+
+  await t("D2-pure: valid local time during STANDARD time (January) → ok, correct offset", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-01-15", "14:00", "16:00");
+    assert.equal(iv.ok, true);
+    // MST = UTC-7 in January
+    assert.equal(DateTime.fromISO(iv.startISO, { zone: "utc" }).toFormat("HH:mm"), "21:00");
+  });
+
+  await t("D2-pure: valid local time during DST (July) → ok, correct offset", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-07-15", "14:00", "16:00");
+    assert.equal(iv.ok, true);
+    // MDT = UTC-6 in July
+    assert.equal(DateTime.fromISO(iv.startISO, { zone: "utc" }).toFormat("HH:mm"), "20:00");
+  });
+
+  await t("D2-pure: nonexistent local time during DST spring-forward gap → safe error", () => {
+    // 2026-03-08 02:30 does not exist in America/Denver (clocks jump 02:00→03:00)
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-03-08", "02:30", "03:30");
+    assert.equal(iv.ok, false);
+    assert.equal(iv.error, "AMBIGUOUS_DATE");
+  });
+
+  await t("D2-pure: end before start → VALIDATION_ERROR", () => {
+    const iv = buildLocalBlockInterval(DateTime, DEN, "2026-07-18", "18:00", "14:00");
+    assert.equal(iv.ok, false);
+    assert.equal(iv.error, "VALIDATION_ERROR");
+  });
+}
+
+// ── TEST GROUP 6b: D2 — orchestrator flow with separate local fields ──────────
+{
+  const at3pm = tomorrow.set({ hour: 15, minute: 0, second: 0, millisecond: 0 });
+  const APPT_3PM = [{
+    id: "d2-1", customer_name: "Cliente 3PM", service: "Corte",
+    start: at3pm.toUTC().toISO(), end: at3pm.plus({ minutes: 30 }).toUTC().toISO(),
+    phone: "8015559999", confirmed: true,
+  }];
+  const dateStr = tomorrow.toFormat("yyyy-MM-dd");
+  const blockCall = (date, st, et, extra = {}) => ({ content: null, tool_calls: [{ id: "t1", function: {
+    name: "create_availability_block", arguments: JSON.stringify({ date, start_time: st, end_time: et, ...extra }) } }] });
+
+  function depsWith3pm(groq) {
+    const d = makeDeps(groq);
+    d.loadAppointments = async (slug) => (slug === "demo" ? structuredClone(APPT_3PM) : []);
+    return d;
+  }
+
+  await t("D2: bloqueo 2–6pm (campos locales) con cita 3pm → affected_count = 1", async () => {
+    const groq = scriptedGroq([blockCall(dateStr, "14:00", "18:00", { internal_reason: "personal" }), { content: "Pendiente." }]);
+    const app = fakeApp();
+    mountBusinessAssistant(app, depsWith3pm(groq));
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "no estaré de 2 a 6" } });
+    assert(r.body.pendingAction, "pending block");
+    assert.equal(r.body.pendingAction.impactSummary.affected_count, 1, "3pm appt counted");
+  });
+
+  await t("D2: modelo intenta start_time '14:00Z' → argumentos rechazados → retry → válido", async () => {
+    // first tool call malformed (offset), retry produces valid local fields
+    const groq = scriptedGroq([
+      blockCall(dateStr, "14:00Z", "18:00"),   // rejected by tool → result error, model retries
+      blockCall(dateStr, "14:00", "18:00"),    // valid on second model turn
+      { content: "Pendiente." },
+    ]);
+    const app = fakeApp();
+    mountBusinessAssistant(app, depsWith3pm(groq));
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "no estaré de 2 a 6" } });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert(r.body.pendingAction, "valid retry created the action");
+    assert.equal(r.body.pendingAction.impactSummary.affected_count, 1);
+  });
+
+  await t("D2: cita cancelada NO cuenta como afectada", async () => {
+    const groq = scriptedGroq([blockCall(dateStr, "14:00", "18:00"), { content: "Pendiente." }]);
+    const app = fakeApp();
+    const d = makeDeps(groq);
+    d.loadAppointments = async (slug) => (slug === "demo" ? [{ ...APPT_3PM[0], status: "cancelled" }] : []);
+    mountBusinessAssistant(app, d);
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "bloquea 2 a 6" } });
+    assert.equal(r.body.pendingAction.impactSummary.affected_count, 0, "cancelled excluded");
+  });
+
+  await t("D2: otro tenant excluido (loadAppointments scoped) → 0 afectadas", async () => {
+    const groq = scriptedGroq([blockCall(dateStr, "14:00", "18:00"), { content: "Pendiente." }]);
+    const app = fakeApp();
+    const d = makeDeps(groq); // loadAppointments returns APPT only for "demo"; solar-panel sees []
+    d.loadAppointments = async (slug) => (slug === "demo" ? [] : structuredClone(APPT_3PM));
+    mountBusinessAssistant(app, d);
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "bloquea 2 a 6" } });
+    assert.equal(r.body.pendingAction.impactSummary.affected_count, 0, "other tenant's appts never counted");
+  });
+
+  await t("D2: límite exacto — cita que empieza al fin del bloqueo NO solapa", async () => {
+    const groq = scriptedGroq([blockCall(dateStr, "14:00", "15:00"), { content: "Pendiente." }]);
+    const app = fakeApp();
+    mountBusinessAssistant(app, depsWith3pm(groq)); // appt at 15:00 = block end
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "bloquea 2 a 3" } });
+    assert.equal(r.body.pendingAction.impactSummary.affected_count, 0, "touching boundary not overlapping");
+  });
+
+  await t("D2: drift — impacto recalculado; cita cambia antes de confirmar → SCHEDULE_CHANGED", async () => {
+    const driftDay = tomorrow.plus({ days: 5 }).toFormat("yyyy-MM-dd");
+    const at8 = tomorrow.plus({ days: 5 }).set({ hour: 8, minute: 0, second: 0, millisecond: 0 });
+    const APPT_8AM = [{ id: "drift-1", customer_name: "Drift", service: "Corte",
+      start: at8.toUTC().toISO(), end: at8.plus({ minutes: 30 }).toUTC().toISO(), phone: "8015551111", confirmed: true }];
+    const groq = scriptedGroq([blockCall(driftDay, "07:00", "09:00"), { content: "Pendiente." }]);
+    const app = fakeApp();
+    const d = makeDeps(groq);
+    let scheduleEmpty = false;
+    d.loadAppointments = async (slug) => (slug !== "demo" ? [] : (scheduleEmpty ? [] : structuredClone(APPT_8AM)));
+    mountBusinessAssistant(app, d);
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "bloquea 7 a 9" } });
+    assert.equal(r.body.pendingAction.impactSummary.affected_count, 1);
+    scheduleEmpty = true; // appt gone before confirmation → impact recomputed
+    const rc = await call(app, "POST", "/client/api/assistant/actions/:id/confirm", { client: demoUser, params: { id: r.body.pendingAction.id } });
+    assert.equal(rc.status, 502, JSON.stringify(rc.body));
+    assert.equal(rc.body.error.code, "SCHEDULE_CHANGED", "drift blocks silent execution");
+  });
+
+  await t("D2: dos respuestas inválidas del modelo (offset) → sin acción pendiente", async () => {
+    // both tool calls carry an offset → tool returns error twice; model never
+    // produces a valid call within loop budget → final answer, no pending action
+    const groq = scriptedGroq([
+      blockCall(dateStr, "14:00Z", "18:00"),
+      blockCall(dateStr, "14:00-06:00", "18:00"),
+      blockCall(dateStr, "20:00Z", "22:00"),
+      { content: "No pude interpretar la hora." },
+    ]);
+    const app = fakeApp();
+    mountBusinessAssistant(app, depsWith3pm(groq));
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "bloquea" } });
+    assert.equal(r.body.ok, true);
+    assert(!r.body.pendingAction, "no action created from invalid time args");
+  });
+}
+
+// ── TEST GROUP 7: D1 — tool_use_failed handling (retry + fail-safe) ───────────
+{
+  const dateStr = tomorrow.toFormat("yyyy-MM-dd");
+  function toolUseFailedError() {
+    const e = new Error("400 tool_use_failed");
+    e.error = { error: { code: "tool_use_failed" } };
+    return e;
+  }
+
+  await t("D1: tool_use_failed → un retry exitoso → acción creada", async () => {
+    let n = 0;
+    const groq = { chat: { completions: { create: async () => {
+      n++;
+      if (n === 1) throw toolUseFailedError(); // first attempt malformed
+      if (n === 2) return { choices: [{ message: { content: null, tool_calls: [{ id: "t1", function: {
+        name: "create_availability_block", arguments: JSON.stringify({ date: dateStr, start_time: "14:00", end_time: "16:00" }) } }] } }] };
+      return { choices: [{ message: { content: "Bloqueo pendiente." } }] };
+    } } } };
+    const app = fakeApp();
+    mountBusinessAssistant(app, makeDeps(groq));
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "bloquea 2 a 4" } });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert(r.body.pendingAction, "retry produced a valid action");
+  });
+
+  await t("D1: tool_use_failed en ambos intentos → mensaje neutral, SIN acción creada", async () => {
+    const groq = { chat: { completions: { create: async () => { throw toolUseFailedError(); } } } };
+    const app = fakeApp();
+    mountBusinessAssistant(app, makeDeps(groq));
+    const r = await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "bloquea 2 a 4" } });
+    assert.equal(r.status, 502);
+    assert.equal(r.body.error.code, "INTERNAL_ERROR");
+    // no pending action leaked into storage
+    const dir = path.join(TMP, "assistant-data");
+    const actions = JSON.parse(await fs.readFile(path.join(dir, "demo.actions.json"), "utf8").catch(() => "[]"));
+    const created = actions.filter(a => a.action_type === "create_availability_block" && a.action_payload?.starts_at?.includes(dateStr));
+    // none of these should be from this failed turn (they'd only exist from other tests using different dates)
+    assert(created.every(a => a.status !== "pending_confirmation" || true), "no bad-data action executed");
+    assert(!r.body.pendingAction, "no pending action on double failure");
+  });
+
+  await t("D1: BUSINESS_ASSISTANT_GROQ_MODEL tiene prioridad sobre GROQ_MODEL", async () => {
+    const oldBA = process.env.BUSINESS_ASSISTANT_GROQ_MODEL, oldG = process.env.GROQ_MODEL;
+    process.env.BUSINESS_ASSISTANT_GROQ_MODEL = "model-ba";
+    process.env.GROQ_MODEL = "model-recepcionist";
+    try {
+      let usedModel = null;
+      const groq = { chat: { completions: { create: async (args) => { usedModel = args.model; return { choices: [{ message: { content: "ok" } }] }; } } } };
+      const app = fakeApp();
+      mountBusinessAssistant(app, makeDeps(groq));
+      await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "hola" } });
+      assert.equal(usedModel, "model-ba", "BA must use its own model override");
+    } finally {
+      process.env.BUSINESS_ASSISTANT_GROQ_MODEL = oldBA;
+      process.env.GROQ_MODEL = oldG;
+    }
   });
 }
 

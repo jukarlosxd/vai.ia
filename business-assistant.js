@@ -103,10 +103,14 @@ async function repoGetConversations(slug, userEmail) {
 
 async function repoGetConversation(slug, id) {
   try {
+    // maybeSingle(): zero rows → { data:null, error:null } (a legitimate
+    // "not found" for this tenant), NOT a PGRST116 error. Using single() here
+    // made a not-found/cross-tenant lookup fall through to requireFileStorage()
+    // and surface as 503 STORAGE_UNAVAILABLE instead of a clean 404.
     const { data, error } = await D.supabase
       .from("business_assistant_conversations").select("*")
-      .eq("tenant_slug", slug).eq("id", id).single();
-    if (!error && data) return data;
+      .eq("tenant_slug", slug).eq("id", id).maybeSingle();
+    if (!error) return data || null;
   } catch { /* fall through */ }
   requireFileStorage();
   const all = await jsonRead(slug, "conversations");
@@ -191,10 +195,13 @@ async function repoAddBlock(slug, block) {
 // ─── repository: pending actions ─────────────────────────────────────────────
 async function repoGetAction(slug, id) {
   try {
+    // maybeSingle(): zero rows → not an error, so a not-found/cross-tenant
+    // action id returns null (→ 404/FORBIDDEN at the route) instead of
+    // falling through to requireFileStorage() and surfacing as 503.
     const { data, error } = await D.supabase
       .from("assistant_pending_actions").select("*")
-      .eq("tenant_slug", slug).eq("id", id).single();
-    if (!error && data) return data;
+      .eq("tenant_slug", slug).eq("id", id).maybeSingle();
+    if (!error) return data || null;
   } catch { /* fall through */ }
   requireFileStorage();
   const all = await jsonRead(slug, "actions");

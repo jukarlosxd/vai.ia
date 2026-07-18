@@ -21,7 +21,7 @@ function offlineSupabase() {
   const builder = {
     then(resolve) { resolve({ data: null, error: { message: "offline" } }); },
   };
-  for (const m of ["select","insert","update","upsert","delete","eq","order","limit","single","in"]) {
+  for (const m of ["select","insert","update","upsert","delete","eq","order","limit","single","maybeSingle","in"]) {
     builder[m] = () => builder;
   }
   return { from: () => builder, rpc: async () => ({ data: null, error: { message: "offline" } }) };
@@ -269,7 +269,7 @@ console.log("── VAI Business Assistant tests ──");
       function selectiveSupabase(failTables) {
         const mk = (fail) => {
           const b = { then(res) { res(fail ? { data: null, error: { message: "offline" } } : { data: [], error: null }); } };
-          for (const m of ["select","insert","update","upsert","delete","eq","order","limit","single","in"]) b[m] = () => b;
+          for (const m of ["select","insert","update","upsert","delete","eq","order","limit","single","maybeSingle","in"]) b[m] = () => b;
           return b;
         };
         return { from: (t) => mk(failTables.includes(t)), rpc: async () => ({ data: null, error: { message: "offline" } }) };
@@ -693,6 +693,91 @@ console.log("── VAI Business Assistant tests ──");
       process.env.BUSINESS_ASSISTANT_GROQ_MODEL = oldBA;
       process.env.GROQ_MODEL = oldG;
     }
+  });
+}
+
+// ── TEST GROUP: D-ISO — "zero rows" vs real storage error (real repo fns) ─────
+// Exercises the .single() → .maybeSingle() fix through the real routes:
+//   own existing → 200 · unknown/cross-tenant → 404 · real driver error → 503.
+// A cross-tenant lookup is byte-identical to "not found" (no existence leak).
+{
+  function dbStub({ single = { data: null, error: null }, list = { data: [], error: null } }) {
+    const builder = {
+      then(resolve) { resolve(list); },              // list queries (messages, blocks…)
+      maybeSingle() { return Promise.resolve(single); },
+      single() { return Promise.resolve(single); },
+    };
+    for (const m of ["select","insert","update","upsert","delete","eq","order","limit","in"]) builder[m] = () => builder;
+    return { from: () => builder, rpc: async () => ({ data: [], error: null }) };
+  }
+  function appWith(stub) {
+    const deps = makeDeps(scriptedGroq([{ content: "ok" }]));
+    deps.supabase = stub;
+    const app = fakeApp();
+    mountBusinessAssistant(app, deps);
+    return app;
+  }
+  // Force the production storage policy (no JSON fallback) so a real driver
+  // error surfaces as 503 instead of silently falling back.
+  const withProdStorage = async (fn) => {
+    const oldEnv = process.env.NODE_ENV, oldFlag = process.env.BUSINESS_ASSISTANT_ALLOW_FILE_STORAGE;
+    process.env.NODE_ENV = "production";
+    delete process.env.BUSINESS_ASSISTANT_ALLOW_FILE_STORAGE;
+    try { return await fn(); }
+    finally { process.env.NODE_ENV = oldEnv; process.env.BUSINESS_ASSISTANT_ALLOW_FILE_STORAGE = oldFlag; }
+  };
+
+  await t("D-ISO: GET conversación propia existente → 200", async () => {
+    const app = appWith(dbStub({ single: { data: { id: "c1", tenant_slug: "demo", user_email: "owner@demo.com", title: "Mi conv" }, error: null } }));
+    const r = await call(app, "GET", "/client/api/assistant/conversations/:id", { client: demoUser, params: { id: "c1" } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.conversation.id, "c1");
+  });
+
+  await t("D-ISO: GET UUID inexistente → 404, nunca 503", async () => {
+    const app = appWith(dbStub({ single: { data: null, error: null } }));
+    const r = await call(app, "GET", "/client/api/assistant/conversations/:id", { client: demoUser, params: { id: "00000000-0000-4000-8000-0000000000ff" } });
+    assert.equal(r.status, 404, JSON.stringify(r.body));
+    assert.deepEqual(r.body, { ok: false, error: { code: "NOT_FOUND", message: "conversation not found" } });
+  });
+
+  await t("D-ISO: GET conversación de OTRO tenant → 404 byte-idéntico (sin fuga de existencia)", async () => {
+    // tenant-scoped query → zero rows for the foreign id → same maybeSingle result
+    const app = appWith(dbStub({ single: { data: null, error: null } }));
+    const r = await call(app, "GET", "/client/api/assistant/conversations/:id", { client: demoUser, params: { id: "beta-owned-conversation" } });
+    assert.deepEqual(r.body, { ok: false, error: { code: "NOT_FOUND", message: "conversation not found" } },
+      "cross-tenant must be indistinguishable from not-found");
+  });
+
+  await t("D-ISO: GET error real de Supabase → 503 STORAGE_UNAVAILABLE", async () => {
+    await withProdStorage(async () => {
+      const app = appWith(dbStub({ single: { data: null, error: { message: "connection reset by peer" } } }));
+      const r = await call(app, "GET", "/client/api/assistant/conversations/:id", { client: demoUser, params: { id: "c1" } });
+      assert.equal(r.status, 503, JSON.stringify(r.body));
+      assert.equal(r.body.error.code, "STORAGE_UNAVAILABLE");
+    });
+  });
+
+  await t("D-ISO: confirm acción inexistente → 404, nunca 503", async () => {
+    const app = appWith(dbStub({ single: { data: null, error: null } }));
+    const r = await call(app, "POST", "/client/api/assistant/actions/:id/confirm", { client: demoUser, params: { id: "00000000-0000-4000-8000-0000000000aa" } });
+    assert.equal(r.status, 404, JSON.stringify(r.body));
+    assert.deepEqual(r.body, { ok: false, error: { code: "NOT_FOUND", message: "action not found" } });
+  });
+
+  await t("D-ISO: cancel acción de OTRO tenant → 404 (sin fuga)", async () => {
+    const app = appWith(dbStub({ single: { data: null, error: null } }));
+    const r = await call(app, "POST", "/client/api/assistant/actions/:id/cancel", { client: demoUser, params: { id: "beta-owned-action" } });
+    assert.deepEqual(r.body, { ok: false, error: { code: "NOT_FOUND", message: "action not found" } });
+  });
+
+  await t("D-ISO: confirm con error real de Supabase → 503 STORAGE_UNAVAILABLE", async () => {
+    await withProdStorage(async () => {
+      const app = appWith(dbStub({ single: { data: null, error: { message: "socket hang up" } } }));
+      const r = await call(app, "POST", "/client/api/assistant/actions/:id/confirm", { client: demoUser, params: { id: "00000000-0000-4000-8000-0000000000ab" } });
+      assert.equal(r.status, 503, JSON.stringify(r.body));
+      assert.equal(r.body.error.code, "STORAGE_UNAVAILABLE");
+    });
   });
 }
 

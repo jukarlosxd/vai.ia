@@ -31,6 +31,7 @@ import crypto from "crypto";
 import twilio from "twilio";
 import { mountBusinessAssistant, getActiveBlockIntervals } from "./business-assistant.js";
 import { resolveTwilioConfiguration } from "./auth/runtime-config.js";
+import { handleBookingConfirmation, bookingConfirmationMode } from "./booking-notify.js";
 import {
   signAdmin,
   verifyAdmin,
@@ -894,6 +895,20 @@ async function sendEmail({ to, subject, text, html }) {
     text,
     html,
   });
+}
+
+// Collaborators for the shared booking-confirmation helper (booking-notify.js).
+// Built at call time so every referenced function/const is already defined.
+function bookingNotifyDeps() {
+  return {
+    smtpReady,
+    sendMail: (msg) => sendEmail(msg),   // adds `from`; only invoked when smtpReady
+    loadAppointments,
+    saveAppointments,
+    savePending,
+    deletePending,
+    randomToken: () => crypto.randomBytes(16).toString("hex"),
+  };
 }
 
 // --- tenants ---
@@ -3173,17 +3188,18 @@ IMPORTANT:
           </div>
         `;
 
-        await sendEmail({ to: pending.email, subject, text, html });
-
-        sess.pendingConfirmation = true;
-        sess.pendingEmail = pending.email;
+        const bk = await handleBookingConfirmation(bookingNotifyDeps(), {
+          slug: safeSlug,
+          pending: { ...pending, subject, text, html },
+          isES,
+          mode: bookingConfirmationMode(process.env, cfg),
+        });
+        if (bk.mode === "required" && bk.emailSent) { sess.pendingConfirmation = true; sess.pendingEmail = pending.email; }
 
         return {
-          reply: isES
-            ? "Perfecto ✅ Te envié el correo para confirmar. Revisa tu inbox y toca **Confirmar cita**."
-            : "Perfect ✅ I sent the confirmation email. Check your inbox and tap **Confirm appointment**.",
-          appointmentCreated: false,
-          appointmentError: "PENDING_CONFIRMATION",
+          reply: bk.reply,
+          appointmentCreated: bk.appointmentCreated,
+          appointmentError: bk.appointmentError,
         };
       }
     }
@@ -3284,17 +3300,18 @@ IMPORTANT:
         </div>
       `;
 
-      await sendEmail({ to: pending.email, subject, text, html });
-
-      sess.pendingConfirmation = true;
-      sess.pendingEmail = pending.email;
+      const bk = await handleBookingConfirmation(bookingNotifyDeps(), {
+        slug: safeSlug,
+        pending: { ...pending, subject, text, html },
+        isES,
+        mode: bookingConfirmationMode(process.env, cfg),
+      });
+      if (bk.mode === "required" && bk.emailSent) { sess.pendingConfirmation = true; sess.pendingEmail = pending.email; }
 
       return {
-        reply: isES
-          ? "Perfecto. Te envié un correo para confirmar la cita. ✅ Revisa tu inbox y dale click a **Confirmar cita**."
-          : "Perfect. I sent you an email to confirm the appointment. ✅ Check your inbox and click **Confirm appointment**.",
-        appointmentCreated: false,
-        appointmentError: "PENDING_CONFIRMATION",
+        reply: bk.reply,
+        appointmentCreated: bk.appointmentCreated,
+        appointmentError: bk.appointmentError,
       };
     }
 
@@ -3526,20 +3543,21 @@ if (sess._repeat.count >= 2 && isPriceQuestion(prompt || "")) {
           </div>
         `;
 
-        await sendEmail({ to: pending.email, subject, text, html });
+        const bk = await handleBookingConfirmation(bookingNotifyDeps(), {
+          slug: safeSlug,
+          pending: { ...pending, subject, text, html },
+          isES,
+          mode: bookingConfirmationMode(process.env, cfg),
+        });
+        if (bk.mode === "required" && bk.emailSent) { sess.pendingConfirmation = true; sess.pendingEmail = pending.email; }
 
-        sess.pendingConfirmation = true;
-        sess.pendingEmail = pending.email;
-
-        appointmentCreated = false;
-        appointmentError = "PENDING_CONFIRMATION";
+        appointmentCreated = bk.appointmentCreated;
+        appointmentError = bk.appointmentError;
 
         fullText = fullText.replace(/<APPOINTMENT_JSON>[\s\S]+<\/APPOINTMENT_JSON>/, "").trim();
 
         return {
-          reply: isES
-            ? "Perfecto. Te envié un correo para confirmar la cita. ✅ Revisa tu inbox y dale click a **Confirmar cita**."
-            : "Perfect. I sent you an email to confirm the appointment. ✅ Check your inbox and click **Confirm appointment**.",
+          reply: bk.reply,
           appointmentCreated,
           appointmentError,
         };

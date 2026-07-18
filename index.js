@@ -31,7 +31,7 @@ import crypto from "crypto";
 import twilio from "twilio";
 import { mountBusinessAssistant, getActiveBlockIntervals } from "./business-assistant.js";
 import { resolveTwilioConfiguration } from "./auth/runtime-config.js";
-import { handleBookingConfirmation, bookingConfirmationMode } from "./booking-notify.js";
+import { handleBookingConfirmation, bookingConfirmationMode, readDeliveryFields, writeDeliveryFields } from "./booking-notify.js";
 import {
   signAdmin,
   verifyAdmin,
@@ -278,6 +278,8 @@ function mapPendingRow(row) {
     start:         row.start_at,     // TIMESTAMPTZ → ISO string; .start used by /confirm
     end:           row.end_at,       // TIMESTAMPTZ → ISO string; .end used by /confirm
     cancel_token:  row.cancel_token  ?? "",
+    // Delivery tracking (defaults keep OLD rows without these columns working).
+    ...readDeliveryFields(row),
   };
 }
 
@@ -300,6 +302,8 @@ async function savePending(slug, pending) {
       start_at:      pending.start,        // already ISO UTC string
       end_at:        pending.end,          // already ISO UTC string
       cancel_token:  pending.cancel_token  ?? "",
+      // Delivery tracking — short enum/counter/code only, never secrets/raw text.
+      ...writeDeliveryFields(pending),
       // created_at: omitted — Supabase DEFAULT now()
     };
 

@@ -86,7 +86,9 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
     }
     const conn = await _loadConnectionRow(integ.id);
     return {
-      connected: integ.enabled && integ.status === "connected",
+      // "connected" = usable: a verified live connection OR a verified test-mode
+      // connection (test-mode still sends, as simulated).
+      connected: integ.enabled && (integ.status === "connected" || integ.status === "test_mode"),
       status: integ.status,
       environment: ENV,
       lastTestedAt: integ.last_tested_at,
@@ -174,9 +176,17 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
   async function getDecryptedCredentials() {
     const integ = await _loadIntegrationRow();
     if (!integ) throw makeErr("DELIVERY_DISABLED", "Twilio integration not connected");
-    if (!integ.enabled) throw makeErr("DELIVERY_DISABLED", "Twilio integration disabled");
     const conn = await _loadConnectionRow(integ.id);
+    // Credentials must be present to build a client. We deliberately do NOT
+    // require integ.enabled here, so a freshly-saved connection can be TESTED
+    // before it is marked connected. A wiped/disconnected integration (token
+    // cleared) surfaces as DELIVERY_DISABLED; a half-filled one as
+    // CONFIGURATION_ERROR. The per-tenant SMS-enabled gate is enforced by the
+    // send path via the returned `smsEnabled`.
     if (!conn?.account_sid || !conn?.auth_token_encrypted) {
+      if (integ.status === "disconnected" && !integ.enabled) {
+        throw makeErr("DELIVERY_DISABLED", "Twilio integration disconnected");
+      }
       throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio credentials incomplete");
     }
     let authToken;

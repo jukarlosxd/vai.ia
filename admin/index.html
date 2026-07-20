@@ -185,6 +185,11 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
       <span id="nav-stats">Statistics</span>
     </button>
+    <div class="nav-section" id="ns-platform" style="margin-top:12px">Platform</div>
+    <button class="nav-item" onclick="showPanel('twilio',this)">
+      <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg></div>
+      <span id="nav-twilio">Apps · Twilio</span>
+    </button>
   </nav>
   <div class="sidebar-footer">
     <button class="lang-toggle" onclick="toggleLang()" id="langBtn">ES — Espanol</button>
@@ -236,6 +241,98 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
         <button class="add-faq" onclick="addFaq()" id="btn-add-faq">+ Add question</button>
         <button class="save-btn" onclick="saveInfo()" id="btn-save-faq">Save FAQ</button>
       </div>
+    </div>
+  </div>
+
+  <!-- TWILIO (Apps) -->
+  <div class="panel" id="panel-twilio" style="flex-direction:column;overflow-y:auto;padding:22px;gap:16px">
+    <div id="tw-envbanner" style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:#fbbf24;font-weight:700;font-size:12px;letter-spacing:.5px;padding:8px 14px;border-radius:10px;text-align:center">STAGING / TEST MODE</div>
+
+    <!-- Connection -->
+    <div class="info-card">
+      <h3>Twilio Connection</h3>
+      <div id="tw-conn-status" style="font-size:13px;color:var(--muted);margin-bottom:10px">Loading…</div>
+      <div class="field-lbl">Account SID</div><input id="tw-sid" placeholder="AC…" autocomplete="off">
+      <div class="field-lbl">Auth Token <span id="tw-tok-state" style="color:var(--muted);font-size:11px"></span></div>
+      <input id="tw-tok" type="password" placeholder="(hidden — leave blank to keep)" autocomplete="off">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="save-btn" id="tw-btn-save" onclick="twSaveConnection()">Save Connection</button>
+        <button class="save-btn" id="tw-btn-test" style="background:var(--surface2)" onclick="twTestConnection()">Test Connection</button>
+        <button class="save-btn" id="tw-btn-disc" style="background:rgba(248,113,113,.12);color:#f87171" onclick="twDisconnect()">Disconnect</button>
+      </div>
+    </div>
+
+    <!-- SMS configuration -->
+    <div class="info-card">
+      <h3>SMS Configuration</h3>
+      <div class="field-lbl">Default From Number</div><input id="tw-from" placeholder="+19477292223">
+      <div class="field-lbl">Messaging Service SID</div><input id="tw-msvc" placeholder="MG… (optional)">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin:10px 0;font-size:13px">
+        <label><input type="checkbox" id="tw-smsEnabled"> SMS Enabled</label>
+        <label><input type="checkbox" id="tw-testMode"> Test Mode</label>
+        <label><input type="checkbox" id="tw-inbound"> Inbound SMS</label>
+        <label><input type="checkbox" id="tw-callbacks"> Status Callbacks</label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="save-btn" id="tw-btn-cfg" onclick="twSaveConnection()">Save SMS Config</button>
+        <button class="save-btn" style="background:var(--surface2)" id="tw-btn-numbers" onclick="twRefreshNumbers()">Refresh Numbers</button>
+      </div>
+      <div id="tw-numbers" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+    </div>
+
+    <!-- Tenant assignments -->
+    <div class="info-card">
+      <h3>Tenant Phone Assignments</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+        <div><div class="field-lbl">Tenant</div><input id="tw-asg-tenant" placeholder="solar-panel" style="width:150px"></div>
+        <div><div class="field-lbl">Phone</div><input id="tw-asg-phone" placeholder="+19477292223" style="width:170px"></div>
+        <label style="font-size:12px"><input type="checkbox" id="tw-asg-sms" checked> SMS</label>
+        <label style="font-size:12px"><input type="checkbox" id="tw-asg-voice"> Voice</label>
+        <select id="tw-asg-mode" style="padding:6px"><option value="test">test</option><option value="live">live</option></select>
+        <button class="save-btn" id="tw-btn-assign" onclick="twAssign()">Assign</button>
+      </div>
+      <div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse" id="tw-asg-table">
+        <thead><tr style="text-align:left;color:var(--muted)"><th>Tenant</th><th>Phone</th><th>SMS</th><th>Voice</th><th>Mode</th><th>Status</th><th>Last</th><th></th></tr></thead>
+        <tbody id="tw-asg-body"></tbody>
+      </table></div>
+    </div>
+
+    <!-- Test SMS -->
+    <div class="info-card">
+      <h3>Send Test SMS</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+        <div><div class="field-lbl">Tenant</div><input id="tw-ts-tenant" placeholder="solar-panel" style="width:150px"></div>
+        <div><div class="field-lbl">Recipient</div><input id="tw-ts-to" placeholder="+13855597773" style="width:170px"></div>
+        <label style="font-size:12px"><input type="checkbox" id="tw-ts-real"> Real send</label>
+      </div>
+      <div class="field-lbl" style="margin-top:8px">Message</div>
+      <textarea id="tw-ts-msg" rows="2" placeholder="Test message…" style="width:100%"></textarea>
+      <button class="save-btn" id="tw-btn-send" onclick="twSendTest()" style="margin-top:8px">Send Test SMS</button>
+      <div id="tw-ts-result" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+    </div>
+
+    <!-- Logs -->
+    <div class="info-card">
+      <h3>Message Logs</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <input id="tw-log-tenant" placeholder="tenant filter" style="width:130px">
+        <select id="tw-log-dir"><option value="">any dir</option><option>inbound</option><option>outbound</option></select>
+        <input id="tw-log-status" placeholder="status" style="width:110px">
+        <button class="save-btn" style="background:var(--surface2)" onclick="twLoadLogs(0)">Filter</button>
+      </div>
+      <div style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">
+        <thead><tr style="text-align:left;color:var(--muted)"><th>Date</th><th>Tenant</th><th>Dir</th><th>From</th><th>To</th><th>Status</th><th>Preview</th><th>SID</th><th>Err</th></tr></thead>
+        <tbody id="tw-log-body"></tbody>
+      </table></div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="save-btn" style="background:var(--surface2)" onclick="twLogPage(-1)">Prev</button><button class="save-btn" style="background:var(--surface2)" onclick="twLogPage(1)">Next</button></div>
+    </div>
+
+    <!-- A2P + future -->
+    <div class="info-card">
+      <h3>A2P 10DLC Readiness</h3>
+      <div style="font-size:13px"><b>Status:</b> Not submitted</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">Checklist (complete when the business is formally registered): legal business name, EIN, business address, website, privacy policy, terms of service, messaging use case, opt-in method, opt-out (STOP/UNSUBSCRIBE/CANCEL/END/QUIT), help (HELP), sample messages, expected monthly volume. Required keywords supported: STOP, START, HELP.</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--muted)"><b>Future integrations:</b> Voice: Coming next · WhatsApp: Not configured</div>
     </div>
   </div>
 
@@ -551,6 +648,7 @@ function showPanel(name,btn){
   if(name==='calendar')renderCalendar();
   if(name==='stats')loadStats();
   if(name==='info')loadTenantConfig();
+  if(name==='twilio')loadTwilio();
 }
 
 function showToast(msg,type='success'){
@@ -562,6 +660,87 @@ async function logout(){
   await fetch('/auth/logout',{method:'POST',credentials:'include'});
   window.location.href='/login';
 }
+
+/* ── Admin → Apps → Twilio ───────────────────────────────────────────────── */
+let twCsrf=null;            // CSRF token kept in memory only (never localStorage/DOM)
+let twLogOffset=0;
+const TWB='/admin/api/apps/twilio';
+function twEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function twApi(path,{method='GET',body=null}={}){
+  const opt={method,credentials:'include',headers:{}};
+  if(body){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
+  if(method!=='GET'&&twCsrf)opt.headers['X-CSRF-Token']=twCsrf;
+  const r=await fetch(TWB+path,opt);
+  let j=null;try{j=await r.json();}catch{}
+  return {status:r.status,body:j};
+}
+function twBusy(on){document.querySelectorAll('#panel-twilio button').forEach(b=>b.disabled=!!on);}
+async function loadTwilio(){
+  const r=await twApi('');
+  if(r.status!==200){document.getElementById('tw-conn-status').textContent='Unable to load (admin only).';return;}
+  twCsrf=r.body.csrfToken;
+  const c=r.body.connection||{};
+  document.getElementById('tw-conn-status').innerHTML=
+    'Status: <b>'+twEsc(c.status||'disconnected')+'</b> · Account: '+twEsc(c.accountSidMasked||'—')+
+    ' · Env: '+twEsc(c.environment||'staging')+
+    (c.lastTestedAt?(' · Last tested: '+twEsc(new Date(c.lastTestedAt).toLocaleString())):'')+
+    (c.lastError?(' · <span style="color:#f87171">'+twEsc(c.lastError)+'</span>'):'');
+  document.getElementById('tw-sid').value=''; // never prefill; masked shown above
+  document.getElementById('tw-sid').placeholder=c.accountSidMasked||'AC…';
+  document.getElementById('tw-tok').value='';  // NEVER load the token into the DOM
+  document.getElementById('tw-tok-state').textContent=c.hasToken?'(Configured — leave blank to keep)':'(not set)';
+  document.getElementById('tw-from').value=c.defaultFromNumber||'';
+  document.getElementById('tw-msvc').value=c.messagingServiceSid||'';
+  document.getElementById('tw-smsEnabled').checked=c.smsEnabled!==false;
+  document.getElementById('tw-testMode').checked=c.testMode!==false;
+  document.getElementById('tw-inbound').checked=c.inboundEnabled!==false;
+  document.getElementById('tw-callbacks').checked=c.statusCallbacksEnabled!==false;
+  twLoadAssignments();twLoadLogs(0);
+}
+async function twSaveConnection(){
+  twBusy(true);
+  const body={
+    accountSid:document.getElementById('tw-sid').value.trim()||undefined,
+    authToken:document.getElementById('tw-tok').value,   // blank → server keeps existing
+    defaultFromNumber:document.getElementById('tw-from').value.trim()||undefined,
+    messagingServiceSid:document.getElementById('tw-msvc').value.trim()||undefined,
+    smsEnabled:document.getElementById('tw-smsEnabled').checked,
+    testMode:document.getElementById('tw-testMode').checked,
+    inboundEnabled:document.getElementById('tw-inbound').checked,
+    statusCallbacksEnabled:document.getElementById('tw-callbacks').checked,
+  };
+  const r=await twApi('/connect',{method:'POST',body});
+  twBusy(false);
+  document.getElementById('tw-tok').value='';  // clear entered secret from the DOM
+  showToast(r.status===200?'Connection saved':(r.body?.error?.message||'Save failed'),r.status===200?'success':'error');
+  if(r.status===200)loadTwilio();
+}
+async function twTestConnection(){twBusy(true);const r=await twApi('/test',{method:'POST',body:{}});twBusy(false);showToast(r.status===200?('Connection OK ('+twEsc(r.body.status)+')'):(r.body?.error?.message||'Test failed'),r.status===200?'success':'error');loadTwilio();}
+async function twDisconnect(){if(!confirm('Disconnect Twilio? Stored credentials will be wiped (logs are kept).'))return;twBusy(true);const r=await twApi('/disconnect',{method:'POST',body:{}});twBusy(false);showToast(r.status===200?'Disconnected':'Failed',r.status===200?'success':'error');loadTwilio();}
+async function twRefreshNumbers(){twBusy(true);const r=await twApi('/numbers');twBusy(false);const el=document.getElementById('tw-numbers');if(r.status!==200){el.textContent=r.body?.error?.message||'Could not list numbers';return;}el.innerHTML=(r.body.numbers||[]).map(n=>twEsc(n.phoneNumber)+' — '+(n.smsCapable?'SMS':'no-SMS')+(n.voiceCapable?' · Voice':'')).join('<br>')||'No numbers';}
+async function twLoadAssignments(){const r=await twApi('/assignments');const b=document.getElementById('tw-asg-body');if(r.status!==200){b.innerHTML='';return;}b.innerHTML=(r.body.assignments||[]).map(a=>'<tr><td>'+twEsc(a.tenantSlug)+'</td><td>'+twEsc(a.phoneMasked)+'</td><td>'+(a.smsEnabled?'✓':'—')+'</td><td>'+(a.voiceEnabled?'✓':'—')+'</td><td>'+twEsc(a.mode)+'</td><td>'+twEsc(a.status)+'</td><td>'+twEsc(a.lastMessageAt?new Date(a.lastMessageAt).toLocaleString():'—')+'</td><td><button class="save-btn" style="padding:3px 8px;background:rgba(248,113,113,.12);color:#f87171" onclick="twDelAssign(\''+twEsc(a.id)+'\')">×</button></td></tr>').join('')||'<tr><td colspan=8 style="color:var(--muted)">No assignments</td></tr>';}
+async function twAssign(){twBusy(true);const body={tenantSlug:document.getElementById('tw-asg-tenant').value.trim(),phoneNumber:document.getElementById('tw-asg-phone').value.trim(),smsEnabled:document.getElementById('tw-asg-sms').checked,voiceEnabled:document.getElementById('tw-asg-voice').checked,mode:document.getElementById('tw-asg-mode').value};const r=await twApi('/assignments',{method:'POST',body});twBusy(false);showToast(r.status===200?'Assigned':(r.body?.error?.message||'Assign failed'),r.status===200?'success':'error');if(r.status===200)twLoadAssignments();}
+async function twDelAssign(id){if(!confirm('Remove this assignment?'))return;twBusy(true);const r=await twApi('/assignments/'+encodeURIComponent(id),{method:'DELETE'});twBusy(false);showToast(r.status===200?'Removed':'Failed',r.status===200?'success':'error');twLoadAssignments();}
+async function twSendTest(){
+  const real=document.getElementById('tw-ts-real').checked;
+  if(real&&!confirm('Send a REAL SMS via Twilio? This uses trial credit and sends to the recipient.'))return;
+  twBusy(true);
+  const body={tenantSlug:document.getElementById('tw-ts-tenant').value.trim()||'platform',to:document.getElementById('tw-ts-to').value.trim(),message:document.getElementById('tw-ts-msg').value,simulate:!real};
+  const r=await twApi('/test-sms',{method:'POST',body});
+  twBusy(false);
+  const el=document.getElementById('tw-ts-result');
+  if(r.status===200)el.innerHTML=(r.body.simulated?'Simulated':'Sent')+' → '+twEsc(r.body.to)+' · status: '+twEsc(r.body.status)+(r.body.sid?(' · '+twEsc(r.body.sid)):'');
+  else el.innerHTML='<span style="color:#f87171">'+twEsc(r.body?.error?.message||'Send failed')+'</span>';
+  twLoadLogs(0);
+}
+async function twLoadLogs(offset){
+  twLogOffset=Math.max(0,offset|0);
+  const q=new URLSearchParams();const t=document.getElementById('tw-log-tenant').value.trim();const d=document.getElementById('tw-log-dir').value;const s=document.getElementById('tw-log-status').value.trim();
+  if(t)q.set('tenant',t);if(d)q.set('direction',d);if(s)q.set('status',s);q.set('limit','25');q.set('offset',String(twLogOffset));
+  const r=await twApi('/logs?'+q.toString());const b=document.getElementById('tw-log-body');if(r.status!==200){b.innerHTML='';return;}
+  b.innerHTML=(r.body.logs||[]).map(l=>'<tr><td>'+twEsc(new Date(l.createdAt).toLocaleString())+'</td><td>'+twEsc(l.tenantSlug)+'</td><td>'+twEsc(l.direction)+'</td><td>'+twEsc(l.from)+'</td><td>'+twEsc(l.to)+'</td><td>'+twEsc(l.status)+'</td><td>'+twEsc(l.preview)+'</td><td>'+twEsc(l.sid||'')+'</td><td>'+twEsc(l.errorCode||'')+'</td></tr>').join('')||'<tr><td colspan=9 style="color:var(--muted)">No messages</td></tr>';
+}
+function twLogPage(dir){const next=twLogOffset+dir*25;if(next<0)return;twLoadLogs(next);}
 </script>
 </body>
 </html>

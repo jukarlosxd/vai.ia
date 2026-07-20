@@ -33,6 +33,7 @@ import { mountBusinessAssistant, getActiveBlockIntervals } from "./business-assi
 import { resolveTwilioConfiguration } from "./auth/runtime-config.js";
 import { handleBookingConfirmation, bookingConfirmationMode, readDeliveryFields, writeDeliveryFields } from "./booking-notify.js";
 import { mountAdminTwilio } from "./routes/admin-twilio.js";
+import { mountTwilioWebhooks } from "./routes/twilio-webhooks.js";
 import { computeSecretErrors } from "./auth/startup-guard.js";
 import { createTwilioStore, normalizeE164 as twilioNormalizeE164 } from "./services/twilio-store.js";
 import {
@@ -3713,6 +3714,22 @@ mountAdminTwilio(app, {
   assertTenantExists,
   auditLog: twilioAudit,
   csrfSecret: process.env.JWT_SECRET,
+});
+
+// Signed inbound-SMS + status-callback webhooks (managed integration). The
+// inbound message is answered by the tenant's PUBLIC AI Receptionist (runChat),
+// NOT the internal Business Assistant. Outbound replies use the same per-tenant
+// sender (simulated in test mode).
+mountTwilioWebhooks(app, {
+  store: twilioStore,
+  twilioSdk: twilio,
+  rateLimit,
+  environment: TWILIO_ENVIRONMENT,
+  runReceptionist: async ({ slug, from, body }) => {
+    const out = await runChat({ prompt: body, slug, sessionId: "sms:" + from });
+    return out?.reply || "";
+  },
+  smsDeliver: twilioSmsDeliver,
 });
 
 mountBusinessAssistant(app, {

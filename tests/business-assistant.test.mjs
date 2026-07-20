@@ -49,7 +49,7 @@ const FIXTURE_APPTS = [
 
 let savedAppointments = null;
 
-function makeDeps(groq) {
+function makeDeps(groq, extra = {}) {
   return {
     supabase: offlineSupabase(),
     groq,
@@ -57,12 +57,13 @@ function makeDeps(groq) {
     loadTenant: async () => ({ vars: { business: "Test Biz", timezone: "America/Denver" } }),
     loadAppointments: async (slug) => (slug === "demo" ? structuredClone(FIXTURE_APPTS) : []),
     saveAppointments: async (slug, list) => { savedAppointments = { slug, list }; },
-    twilioClient: null, // provider unavailable → DELIVERY_FAILED path
+    twilioClient: null, // no legacy global client → managed per-tenant smsDeliver path
     DateTime,
     rateLimit: () => (req, res, next) => next(),
     baseDir: TMP,
     validateSlug: (s) => (/^[a-z0-9-]{1,60}$/.test(String(s || "")) ? String(s) : null),
     assertPathSafe: () => {},
+    ...extra,
   };
 }
 
@@ -411,11 +412,14 @@ console.log("── VAI Business Assistant tests ──");
     const r = await call(app3, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "pregúntale a Miguel López si puede venir a las 5" } });
     assert(r.body.pendingAction, "pending message action");
     assert.equal(r.body.pendingAction.actionType, "send_client_message");
-    // Scenario 14: confirm → provider unavailable (twilioClient null) → failed, not sent
+    // Scenario 14: confirm → SMS delivery not configured (no smsDeliver + null
+    // twilioClient) → failed, not sent. New contract: unconfigured delivery is
+    // DELIVERY_CONFIGURATION_ERROR (was DELIVERY_FAILED before the managed
+    // per-tenant Twilio integration).
     const rc = await call(app3, "POST", `/client/api/assistant/actions/:id/confirm`, { client: demoUser, params: { id: r.body.pendingAction.id } });
     assert.equal(rc.status, 502);
     assert.equal(rc.body.status, "failed");
-    assert.equal(rc.body.error.code, "DELIVERY_FAILED");
+    assert.equal(rc.body.error.code, "DELIVERY_CONFIGURATION_ERROR");
   });
 
   await t("Scenario 9: motivo interno nunca aparece en payload del mensaje al cliente", async () => {
@@ -778,6 +782,72 @@ console.log("── VAI Business Assistant tests ──");
       assert.equal(r.status, 503, JSON.stringify(r.body));
       assert.equal(r.body.error.code, "STORAGE_UNAVAILABLE");
     });
+  });
+}
+
+// ── TEST GROUP: Business Assistant SMS delivery via per-tenant smsDeliver ─────
+// The send_client_message executor delegates to the injected smsDeliver (the
+// managed per-tenant Twilio path). It maps DELIVERY_* codes and NEVER reports
+// "delivered" on send. Confirmation is atomic (no double send); cancel sends nothing.
+{
+  async function makeSendAction(app, groqBody = "Recordatorio: confirma tu cita, por favor.") {
+    return await call(app, "POST", "/client/api/assistant/messages", { client: demoUser, body: { text: "envía un SMS a Miguel López" } });
+  }
+  const sendGroq = () => scriptedGroq([
+    { content: null, tool_calls: [{ id: "t1", function: { name: "send_client_message", arguments: JSON.stringify({ appointment_id: "a2", body: "Recordatorio de tu cita." }) } }] },
+    { content: "Preparé el mensaje. Confírmalo para enviarlo." },
+  ]);
+
+  await t("BA SMS: smsDeliver success → confirm → completed (queued, not delivered), called once", async () => {
+    const calls = [];
+    const smsDeliver = async (args) => { calls.push(args); return { ok: true, code: "DELIVERY_QUEUED", status: "simulated", simulated: true, sid: "SM_SIM_1" }; };
+    const app = fakeApp(); mountBusinessAssistant(app, makeDeps(sendGroq(), { smsDeliver }));
+    const r = await makeSendAction(app);
+    assert.equal(r.body.pendingAction.actionType, "send_client_message");
+    const rc = await call(app, "POST", "/client/api/assistant/actions/:id/confirm", { client: demoUser, params: { id: r.body.pendingAction.id } });
+    assert.equal(rc.status, 200);
+    assert.equal(rc.body.status, "completed");
+    assert.equal(rc.body.result.delivery, "DELIVERY_QUEUED");
+    assert.notEqual(rc.body.result.delivery, "DELIVERY_DELIVERED");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].tenantSlug, "demo");   // tenant from authenticated session, not payload
+  });
+
+  for (const [label, code] of [["DELIVERY_DISABLED", "DELIVERY_DISABLED"], ["DELIVERY_CONFIGURATION_ERROR", "DELIVERY_CONFIGURATION_ERROR"], ["DELIVERY_FAILED", "DELIVERY_FAILED"]]) {
+    await t(`BA SMS: smsDeliver ${label} → confirm → 502 failed with ${code}`, async () => {
+      const smsDeliver = async () => ({ ok: false, code, message: "nope" });
+      const app = fakeApp(); mountBusinessAssistant(app, makeDeps(sendGroq(), { smsDeliver }));
+      const r = await makeSendAction(app);
+      const rc = await call(app, "POST", "/client/api/assistant/actions/:id/confirm", { client: demoUser, params: { id: r.body.pendingAction.id } });
+      assert.equal(rc.status, 502);
+      assert.equal(rc.body.status, "failed");
+      assert.equal(rc.body.error.code, code);
+    });
+  }
+
+  await t("BA SMS: confirm twice → exactly ONE smsDeliver call; second → 409 ALREADY_PROCESSED", async () => {
+    let n = 0;
+    const smsDeliver = async () => { n++; return { ok: true, code: "DELIVERY_QUEUED", status: "queued", sid: "SM_1" }; };
+    const app = fakeApp(); mountBusinessAssistant(app, makeDeps(sendGroq(), { smsDeliver }));
+    const r = await makeSendAction(app);
+    const id = r.body.pendingAction.id;
+    const first = await call(app, "POST", "/client/api/assistant/actions/:id/confirm", { client: demoUser, params: { id } });
+    const second = await call(app, "POST", "/client/api/assistant/actions/:id/confirm", { client: demoUser, params: { id } });
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 409);
+    assert.equal(second.body.error.code, "ACTION_ALREADY_PROCESSED");
+    assert.equal(n, 1, "exactly one Twilio delivery");
+  });
+
+  await t("BA SMS: cancel → ZERO smsDeliver calls; action cancelled", async () => {
+    let n = 0;
+    const smsDeliver = async () => { n++; return { ok: true, code: "DELIVERY_QUEUED" }; };
+    const app = fakeApp(); mountBusinessAssistant(app, makeDeps(sendGroq(), { smsDeliver }));
+    const r = await makeSendAction(app);
+    const rc = await call(app, "POST", "/client/api/assistant/actions/:id/cancel", { client: demoUser, params: { id: r.body.pendingAction.id } });
+    assert.equal(rc.status, 200);
+    assert.equal(rc.body.status, "cancelled");
+    assert.equal(n, 0, "cancel sends nothing");
   });
 }
 

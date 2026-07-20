@@ -32,6 +32,9 @@ import twilio from "twilio";
 import { mountBusinessAssistant, getActiveBlockIntervals } from "./business-assistant.js";
 import { resolveTwilioConfiguration } from "./auth/runtime-config.js";
 import { handleBookingConfirmation, bookingConfirmationMode, readDeliveryFields, writeDeliveryFields } from "./booking-notify.js";
+import { mountAdminTwilio } from "./routes/admin-twilio.js";
+import { computeSecretErrors } from "./auth/startup-guard.js";
+import { createTwilioStore, normalizeE164 as twilioNormalizeE164 } from "./services/twilio-store.js";
 import {
   signAdmin,
   verifyAdmin,
@@ -3637,48 +3640,13 @@ app.post("/api/chat", widgetCors, chatLimiter, async (req, res) => {
 // The application will refuse to start if any required secret is missing or
 // still set to a known-weak default value. This prevents silent insecure deployments.
 (function validateRequiredSecrets() {
-  const errors = [];
-
-  // JWT_SECRET: required, must be at least 32 characters
-  const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret) {
-    errors.push("JWT_SECRET is not set.");
-  } else if (jwtSecret.length < 32) {
-    errors.push(`JWT_SECRET is too short (${jwtSecret.length} chars). Minimum 32 required.`);
-  } else if (["changeme", "secret", "password", "123456", "jwt_secret"].includes(jwtSecret.toLowerCase())) {
-    errors.push(`JWT_SECRET is set to a known-weak value: "${jwtSecret}". Use a random 64-char string.`);
-  }
-
-  // ADMIN_TOKEN: required, must be at least 32 characters
-  const adminToken = process.env.ADMIN_TOKEN;
-  if (!adminToken) {
-    errors.push("ADMIN_TOKEN is not set.");
-  } else if (adminToken.length < 32) {
-    errors.push(`ADMIN_TOKEN is too short (${adminToken.length} chars). Minimum 32 required.`);
-  } else if (["devtoken", "admin", "token", "secret"].includes(adminToken.toLowerCase())) {
-    errors.push(`ADMIN_TOKEN is set to a known-weak value: "${adminToken}".`);
-  }
-
-  // SUPABASE_URL and SUPABASE_SERVICE_KEY: required for auth
-  if (!process.env.SUPABASE_URL)        errors.push("SUPABASE_URL is not set.");
-  if (!process.env.SUPABASE_SERVICE_KEY) errors.push("SUPABASE_SERVICE_KEY is not set.");
-
-  // GROQ_API_KEY: required for AI
-  if (!process.env.GROQ_API_KEY) errors.push("GROQ_API_KEY is not set.");
-
-  // TWILIO: validated by the shared resolveTwilioConfiguration() helper. An
-  // enabled channel with a partial config (or an ambiguous TWILIO_ENABLED
-  // value) is a hard startup error — never a silent half-setup or placeholder.
-  // When the channel is disabled the server starts without Twilio.
-  for (const e of twilioConfig.errors) errors.push(e);
-
+  const errors = computeSecretErrors(process.env);
   if (errors.length > 0) {
     console.error("\n[FATAL] Application startup blocked — required secrets are missing or insecure:");
     errors.forEach(e => console.error("  ✗ " + e));
     console.error("\nSet these environment variables and restart the application.\n");
     process.exit(1);
   }
-
   console.log("[STARTUP] Secret validation passed ✓");
 })();
 // ──────────────────────────────────────────────────────────────────────────────
@@ -3686,6 +3654,67 @@ app.post("/api/chat", widgetCors, chatLimiter, async (req, res) => {
 // ─── VAI BUSINESS ASSISTANT (private in-panel assistant) ─────────────────────
 // Mounted before listen. All routes under /client/api/assistant/* use the
 // existing client JWT auth; tenant always comes from req.client.slug.
+// ─── TWILIO MANAGED INTEGRATION (per-tenant, encrypted credentials) ──────────
+const TWILIO_ENVIRONMENT = process.env.APP_ENV === "production" ? "production" : "staging";
+const twilioStore = createTwilioStore({ supabase, environment: TWILIO_ENVIRONMENT });
+const twilioClientFactory = (accountSid, authToken) => twilio(accountSid, authToken);
+async function assertTenantExists(slug) {
+  const safe = validateSlug(slug);
+  if (!safe) return false;
+  const { data } = await supabase.from("tenants").select("slug").eq("slug", safe).maybeSingle();
+  return !!data;
+}
+function twilioAudit({ actor, area, action, ...meta }) {
+  // Sanitized admin audit — never logs secrets.
+  console.log(`[AUDIT][${area}] ${action} by=${actor || "?"} env=${TWILIO_ENVIRONMENT}`, JSON.stringify(meta));
+  return Promise.resolve();
+}
+
+// Per-tenant SMS delivery used by the Business Assistant's send_client_message.
+// Resolves the tenant's assignment + encrypted connection, decrypts server-side,
+// sends via a scoped Twilio client (or simulates in test mode), and logs. Returns
+// a normalized { ok, code, status, sid } — NEVER "delivered" (only queued until a
+// status callback confirms carrier delivery).
+async function twilioSmsDeliver({ tenantSlug, to, body }) {
+  const dest = twilioNormalizeE164(to);
+  if (!dest) return { ok: false, code: "VALIDATION_ERROR", message: "invalid destination phone" };
+  const send = await twilioStore.resolveSendConfigByTenant(tenantSlug);
+  if (!send) return { ok: false, code: "DELIVERY_CONFIGURATION_ERROR", message: "no Twilio number assigned to this tenant" };
+  if (!send.smsEnabled) return { ok: false, code: "DELIVERY_DISABLED", message: "SMS is disabled for this tenant" };
+  let creds;
+  try { creds = await twilioStore.getDecryptedCredentials(); }
+  catch (e) { return { ok: false, code: e.code || "DELIVERY_CONFIGURATION_ERROR", message: e.message }; }
+  if (!creds.smsEnabled) return { ok: false, code: "DELIVERY_DISABLED", message: "SMS is disabled for this connection" };
+  const from = send.phoneNumber;
+  // Test mode → simulate (never touch Twilio); record 'simulated'.
+  if (send.mode === "test" || creds.testMode) {
+    const sid = "SM_SIMULATED_" + crypto.randomBytes(6).toString("hex");
+    await twilioStore.logMessage({ tenantSlug, direction: "outbound", from, to: dest, body, status: "simulated", sid });
+    return { ok: true, code: "DELIVERY_QUEUED", status: "simulated", sid, simulated: true };
+  }
+  const client = twilioClientFactory(creds.accountSid, creds.authToken);
+  let msg;
+  try { msg = await client.messages.create({ from, to: dest, body }); }
+  catch (e) {
+    const m = (e?.message || "send failed").split("\n")[0].slice(0, 160);
+    await twilioStore.logMessage({ tenantSlug, direction: "outbound", from, to: dest, body, status: "failed", errorCode: e?.code ? String(e.code) : null, errorMessage: m });
+    return { ok: false, code: "DELIVERY_FAILED", message: m };
+  }
+  await twilioStore.logMessage({ tenantSlug, direction: "outbound", from, to: dest, body, status: msg.status || "queued", sid: msg.sid });
+  return { ok: true, code: "DELIVERY_QUEUED", status: msg.status || "queued", sid: msg.sid };
+}
+
+mountAdminTwilio(app, {
+  supabase,
+  environment: TWILIO_ENVIRONMENT,
+  verifyAdmin,
+  rateLimit,
+  twilioClientFactory,
+  assertTenantExists,
+  auditLog: twilioAudit,
+  csrfSecret: process.env.JWT_SECRET,
+});
+
 mountBusinessAssistant(app, {
   supabase,
   groq,
@@ -3694,6 +3723,7 @@ mountBusinessAssistant(app, {
   loadAppointments,
   saveAppointments,
   twilioClient,
+  smsDeliver: twilioSmsDeliver,   // per-tenant SMS delivery (replaces global client)
   DateTime,
   rateLimit,
   baseDir: __dirname,

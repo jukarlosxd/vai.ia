@@ -612,18 +612,35 @@ const TOOLS = {
     },
     async execute(ctx, action) {
       const p = action.action_payload;
-      // Re-validate appointment still exists
+      // Re-validate the appointment still exists (tenant-scoped).
       const list = await D.loadAppointments(ctx.slug);
       const a = list.find(x => x.id === p.appointment_id);
       if (!a) return { ok: false, error_code: "NOT_FOUND", message: "appointment no longer exists" };
-      if (!D.twilioClient) return { ok: false, error_code: "DELIVERY_FAILED", message: "SMS provider not configured (TWILIO_ACCOUNT_SID/AUTH_TOKEN missing)" };
+
+      // Delivery goes through the per-tenant managed Twilio integration (encrypted
+      // connection resolved by tenant), NOT a global shared client. The delivery
+      // helper decrypts server-side, sends via a scoped client (or simulates in
+      // test mode), logs, and returns a DELIVERY_* code. It NEVER reports
+      // "delivered" here — only queued/accepted until a status callback confirms.
+      if (typeof D.smsDeliver === "function") {
+        const r = await D.smsDeliver({ tenantSlug: ctx.slug, to: p.to_phone, body: p.body });
+        if (r.ok) {
+          return { ok: true, delivery: r.code || "DELIVERY_QUEUED", status: r.status || "queued", provider_sid: r.sid || null, simulated: !!r.simulated };
+        }
+        // Map delivery error codes to the action's error_code contract.
+        const code = ["DELIVERY_DISABLED", "DELIVERY_CONFIGURATION_ERROR", "DELIVERY_FAILED", "VALIDATION_ERROR"].includes(r.code) ? r.code : "DELIVERY_FAILED";
+        return { ok: false, error_code: code, message: r.message || "SMS delivery failed" };
+      }
+
+      // Legacy fallback (kept for compatibility if smsDeliver is not injected).
+      if (!D.twilioClient) return { ok: false, error_code: "DELIVERY_CONFIGURATION_ERROR", message: "SMS delivery is not configured" };
       const from = ctx.cfg.twilio_number || ctx.cfg.vars?.twilio_number;
-      if (!from) return { ok: false, error_code: "DELIVERY_FAILED", message: "tenant has no Twilio number configured" };
+      if (!from) return { ok: false, error_code: "DELIVERY_CONFIGURATION_ERROR", message: "tenant has no Twilio number configured" };
       const to = normalizeE164(p.to_phone);
       if (!to) return { ok: false, error_code: "VALIDATION_ERROR", message: "invalid destination phone" };
       try {
         const msg = await D.twilioClient.messages.create({ from, to, body: p.body });
-        return { ok: true, provider_sid: msg.sid, status: msg.status || "queued" };
+        return { ok: true, delivery: "DELIVERY_QUEUED", provider_sid: msg.sid, status: msg.status || "queued" };
       } catch (e) {
         return { ok: false, error_code: "DELIVERY_FAILED", message: safeProviderError(e) };
       }

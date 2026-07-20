@@ -2,6 +2,11 @@
 .env
 .env.*
 .env.staging
+# …but DO track the placeholder template (no real values):
+!.env.example
+
+# Temporary diagnostic scripts (never commit)
+_diag_tmp.mjs
 
 # Dependencies
 node_modules/

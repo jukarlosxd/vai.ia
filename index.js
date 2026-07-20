@@ -2557,15 +2557,12 @@ app.get("/api/session", widgetCors, sessionLimiter, async (req, res) => {
   res.json({ sessionId: id });
 });
 
-// rate limit (super simple)
-let lastHit = 0;
-app.use((req, res, next) => {
-  const now = Date.now();
-  if (now - lastHit < 200)
-    return res.status(429).json({ error: "Too fast, try again" });
-  lastHit = now;
-  next();
-});
+// NOTE: the old global 200ms debounce (`lastHit`) was removed. It used a single
+// process-wide timestamp shared across ALL clients and ALL routes, so two
+// legitimate requests within 200ms (panel bootstrap calls, a double-submit, or
+// two different users) got a spurious 429 "Too fast, try again". Per-route
+// limiters (loginLimiter, chatLimiter, baLimiter, sessionLimiter, …) provide the
+// real, per-IP protection.
 
 function normPhone(x="") { return String(x).replace(/\D/g,""); }
 function hasCancelIntent(t="") {

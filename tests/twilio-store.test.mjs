@@ -346,5 +346,49 @@ await t("D-SCHEMA-3: saveConnection reports failure when the 'saved' transition 
   assert.equal(supabase._tables.app_integrations[0].status, "saved", "normal path still reaches 'saved'");
 });
 
+// ── number ownership (tenant takeover found live in staging) ────────────────
+
+await t("D-OWN-1: another tenant CANNOT take over a number already assigned", async () => {
+  const s = mk();
+  const ok = async () => true;
+  await s.assignNumber({ tenantSlug: "solar-panel", phoneNumber: "+19477292223", smsEnabled: true },
+                       { assertTenantExists: ok });
+  await assert.rejects(
+    () => s.assignNumber({ tenantSlug: "staging-beta", phoneNumber: "+19477292223", smsEnabled: true },
+                         { assertTenantExists: ok }),
+    (e) => { assert.match(e.message, /already assigned to another tenant/i); return true; },
+  );
+  // ownership and routing must be unchanged
+  const list = await s.listAssignments();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].tenantSlug, "solar-panel");
+  const routed = await s.resolveTenantByNumber("+19477292223");
+  assert.equal(routed.tenantSlug, "solar-panel", "inbound routing must not follow a rejected takeover");
+});
+
+await t("D-OWN-2: the SAME tenant may update its own assignment", async () => {
+  const s = mk();
+  const ok = async () => true;
+  await s.assignNumber({ tenantSlug: "solar-panel", phoneNumber: "+19477292223", smsEnabled: true, voiceEnabled: false },
+                       { assertTenantExists: ok });
+  const upd = await s.assignNumber({ tenantSlug: "solar-panel", phoneNumber: "+19477292223", smsEnabled: false, voiceEnabled: true },
+                                   { assertTenantExists: ok });
+  assert.equal(upd.smsEnabled, false);
+  assert.equal(upd.voiceEnabled, true);
+  const list = await s.listAssignments();
+  assert.equal(list.length, 1, "still one assignment, not a duplicate");
+});
+
+await t("D-OWN-3: releasing a number lets a different tenant claim it", async () => {
+  const s = mk();
+  const ok = async () => true;
+  const a = await s.assignNumber({ tenantSlug: "solar-panel", phoneNumber: "+19477292223", smsEnabled: true },
+                                 { assertTenantExists: ok });
+  await s.deleteAssignment(a.id);
+  const b = await s.assignNumber({ tenantSlug: "staging-beta", phoneNumber: "+19477292223", smsEnabled: true },
+                                 { assertTenantExists: ok });
+  assert.equal(b.tenantSlug, "staging-beta");
+});
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

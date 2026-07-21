@@ -298,8 +298,33 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
       status: input.status === "disabled" ? "disabled" : "active",
       environment: ENV, updated_at: new Date().toISOString(),
     };
-    const { data, error } = await supabase.from("tenant_phone_assignments")
-      .upsert(row, { onConflict: "phone_number,environment" }).select().single();
+    // A number may belong to exactly ONE tenant per environment. Upserting on
+    // (phone_number, environment) silently REASSIGNED the number by rewriting
+    // tenant_slug, so any admin action for tenant B could take a number away
+    // from tenant A — and inbound routing would follow it. The UNIQUE index
+    // guaranteed unambiguous routing but not ownership; ownership is enforced
+    // here. Re-saving the SAME tenant's assignment (toggling sms/voice/mode)
+    // stays an update.
+    const { data: current, error: readError } = await supabase
+      .from("tenant_phone_assignments")
+      .select("id,tenant_slug")
+      .eq("phone_number", e164)
+      .eq("environment", ENV)
+      .maybeSingle();
+    if (readError) throw makeErr("VALIDATION_ERROR", "assignment failed");
+    if (current && current.tenant_slug !== input.tenantSlug) {
+      throw makeErr("VALIDATION_ERROR",
+        "this number is already assigned to another tenant in this environment");
+    }
+
+    let data, error;
+    if (current) {
+      ({ data, error } = await supabase.from("tenant_phone_assignments")
+        .update(row).eq("id", current.id).select().single());
+    } else {
+      ({ data, error } = await supabase.from("tenant_phone_assignments")
+        .insert(row).select().single());
+    }
     if (error) throw makeErr("VALIDATION_ERROR", "assignment failed (duplicate/incompatible)");
     return _assignmentView(data);
   }

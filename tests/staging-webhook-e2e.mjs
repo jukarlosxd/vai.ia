@@ -5,13 +5,13 @@
 // Auth Token is read from an environment variable and is NEVER printed, never
 // written to disk, never committed.
 //
-// Usage (PowerShell):
+// Usage (PowerShell) — the token is typed masked and never echoed:
 //   cd C:\Users\jukar\Desktop\vai.ia
-//   $env:TWILIO_AUTH_TOKEN = Read-Host -AsSecureString | ForEach-Object {
-//       [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-//         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($_)) }
+//   $sec = Read-Host "Twilio Auth Token" -AsSecureString
+//   $env:TWILIO_AUTH_TOKEN = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+//       [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
 //   node tests/staging-webhook-e2e.mjs
-//   Remove-Item Env:\TWILIO_AUTH_TOKEN
+//   Remove-Item Env:\TWILIO_AUTH_TOKEN; Remove-Variable sec
 //
 // Safety: only ever talks to BASE (staging). Asserts that no production host is
 // contacted. Sends no real SMS.

@@ -398,7 +398,12 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
       tenant_slug: tenantSlug, environment: ENV,
     });
     if (error) {
-      // Unique violation = already processed → not first time.
+      // Unique violation = already processed → not first time. This is the
+      // ONLY thing standing between a Twilio retry and a double-processed
+      // message. For INBOUND events message_status is NULL, so this dedup
+      // depends on uq_webhook_event being declared NULLS NOT DISTINCT
+      // (migration 005) — under default SQL semantics NULLs never collide and
+      // a replayed inbound SMS would be handled twice.
       if (error.code === "23505") return { firstTime: false, reason: "duplicate" };
       throw new Error("twilio-store: cannot record webhook event");
     }

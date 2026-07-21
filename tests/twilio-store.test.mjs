@@ -189,6 +189,35 @@ await t("recordWebhookEvent is idempotent (duplicate sid/type/status → no-op)"
   assert.equal(again.firstTime, false);
 });
 
+// D-IDEMP: inbound events have message_status = NULL. Under default SQL a
+// UNIQUE constraint treats NULLs as distinct, so a replayed inbound SMS was
+// recorded twice (observed live: 3 duplicated message_sids). The fix is
+// migration 005 (UNIQUE ... NULLS NOT DISTINCT). The fake models that: a NULL
+// status collides with a NULL status.
+await t("D-IDEMP-1: a replayed INBOUND event (NULL status) is deduped", async () => {
+  const s = mk();
+  const first = await s.recordWebhookEvent({ messageSid: "SMinbound1", eventType: "inbound", tenantSlug: "solar-panel" });
+  const again = await s.recordWebhookEvent({ messageSid: "SMinbound1", eventType: "inbound", tenantSlug: "solar-panel" });
+  assert.equal(first.firstTime, true, "first inbound is processed");
+  assert.equal(again.firstTime, false, "a retried inbound MessageSid must NOT be processed again");
+});
+
+await t("D-IDEMP-2: distinct inbound SIDs are each processed once", async () => {
+  const s = mk();
+  const a = await s.recordWebhookEvent({ messageSid: "SMa", eventType: "inbound" });
+  const b = await s.recordWebhookEvent({ messageSid: "SMb", eventType: "inbound" });
+  assert.equal(a.firstTime, true);
+  assert.equal(b.firstTime, true);
+});
+
+await t("D-IDEMP-3: an inbound and a status event for the same SID are independent", async () => {
+  const s = mk();
+  const inb = await s.recordWebhookEvent({ messageSid: "SMx", eventType: "inbound" });
+  const st  = await s.recordWebhookEvent({ messageSid: "SMx", eventType: "status", messageStatus: "delivered" });
+  assert.equal(inb.firstTime, true);
+  assert.equal(st.firstTime, true, "a status callback is a different event type, not a duplicate of the inbound");
+});
+
 await t("logMessage + updateMessageStatus + listMessages (SID masked, phones masked)", async () => {
   const s = mk();
   await s.logMessage({ tenantSlug: "solar-panel", direction: "outbound", from: "+19477292223", to: "+13855597773", body: "hi", status: "queued", sid: "SM_abcdef123456" });

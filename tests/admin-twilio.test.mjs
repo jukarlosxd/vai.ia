@@ -74,7 +74,11 @@ const rateLimit = () => (req, res, next) => next();
 function makeDeps(twilioBehavior = {}) {
   const supabase = fakeSupabase();
   const twilioClientFactory = (sid, token) => ({
-    api: { accounts: () => ({ fetch: async () => { if (twilioBehavior.authFail) { const e = new Error("Authenticate"); e.code = 20003; throw e; } return { status: "active", type: "Trial" }; } }) },
+    api: { accounts: () => ({ fetch: async () => {
+      if (twilioBehavior.authFail) { const e = new Error("Authenticate"); e.code = 20003; throw e; }
+      if (twilioBehavior.netFail) { const e = new Error("getaddrinfo ENOTFOUND api.twilio.com"); e.errno = "ENOTFOUND"; throw e; }
+      return { status: "active", type: "Trial" };
+    } }) },
     incomingPhoneNumbers: { list: async () => (twilioBehavior.numbers || []) },
     messages: { create: async (m) => { if (twilioBehavior.sendFail) { const e = new Error("Message failed"); e.code = 21610; throw e; } return { sid: "SM_real_abcdef", status: "queued", ...m }; } },
   });
@@ -181,6 +185,108 @@ await t("assignments: valid tenant assigns; ghost tenant → 400", async () => {
   const list = await call(app, "GET", `${B}/assignments`);
   assert.equal(list.body.assignments.length, 1);
   assert.ok(list.body.assignments[0].phoneMasked.includes("••"), "assignment phone masked");
+});
+
+// ── POST /test — the staging "Status: error / disconnected" defect ──────────
+// Contract: the test ALWAYS uses the persisted, server-decrypted credentials;
+// it never accepts a token from the browser; a failure never destroys or hides
+// what is stored; and the status vocabulary distinguishes the real cause.
+
+await t("D-TEST-1: correct SID + token → connected, sanitized success payload", async () => {
+  const { app, api } = makeDeps();
+  const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
+  const h = { "x-csrf-token": token };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "realtoken" } });
+  const r = await call(app, "POST", `${B}/test`, { headers: h, body: {} });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.connected, true);
+  assert.ok(["connected", "test_mode"].includes(r.body.status), "status " + r.body.status);
+  assert.ok(r.body.accountMasked && r.body.accountMasked.includes("••"), "SID masked");
+  assert.equal(r.body.hasToken, true);
+  assert.ok(r.body.lastTestedAt, "lastTestedAt stamped");
+  assert.ok(!JSON.stringify(r.body).includes("realtoken"), "no secret in response");
+});
+
+await t("D-TEST-2: correct SID + wrong token → authentication_error (not 'disconnected')", async () => {
+  const { app, api } = makeDeps({ authFail: true });
+  const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
+  const h = { "x-csrf-token": token };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "wrongtoken" } });
+  const r = await call(app, "POST", `${B}/test`, { headers: h, body: {} });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.connected, false);
+  assert.equal(r.body.status, "authentication_error");
+  assert.match(r.body.error, /rejected the saved credentials/i);
+  assert.ok(!/disconnected/i.test(r.body.error), "must not blame an admin disconnect");
+});
+
+await t("D-TEST-3: a failed test preserves the Account SID and the stored token", async () => {
+  const { app, api } = makeDeps({ authFail: true });
+  const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
+  const h = { "x-csrf-token": token };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "wrongtoken" } });
+  const r = await call(app, "POST", `${B}/test`, { headers: h, body: {} });
+  assert.ok(r.body.accountMasked, "SID still shown after a failed test");
+  assert.equal(r.body.hasToken, true, "token still stored after a failed test");
+  const after = await call(app, "GET", B);
+  assert.ok(after.body.connection.accountSidMasked, "GET still shows the SID");
+  assert.equal(after.body.connection.hasToken, true, "GET still reports a stored token");
+});
+
+await t("D-TEST-4: token never saved → configuration_error naming the Auth Token", async () => {
+  const { app, api } = makeDeps();
+  const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
+  const h = { "x-csrf-token": token };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID } });   // SID only
+  const r = await call(app, "POST", `${B}/test`, { headers: h, body: {} });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.status, "configuration_error");
+  assert.match(r.body.error, /Auth Token is not configured/i);
+  assert.equal(r.body.hasToken, false);
+  assert.ok(r.body.accountMasked, "the SID that WAS saved is still reported");
+});
+
+await t("D-TEST-5: the test ignores any token supplied in the request body", async () => {
+  const { app, api } = makeDeps({ authFail: true });
+  const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
+  const h = { "x-csrf-token": token };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "storedtoken" } });
+  // A caller trying to smuggle "good" credentials through the test endpoint
+  // must not change the outcome — persisted credentials are the only source.
+  const r = await call(app, "POST", `${B}/test`, { headers: h, body: { authToken: "attacker-supplied", accountSid: "AC" + "9".repeat(32) } });
+  assert.equal(r.body.status, "authentication_error", "still uses the STORED (failing) credentials");
+  assert.ok(!JSON.stringify(r.body).includes("attacker-supplied"));
+});
+
+await t("D-TEST-6: a network failure is network_error, and never leaks the raw provider error", async () => {
+  const { app, api } = makeDeps({ netFail: true });
+  const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
+  const h = { "x-csrf-token": token };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "tok" } });
+  const r = await call(app, "POST", `${B}/test`, { headers: h, body: {} });
+  assert.equal(r.body.status, "network_error");
+  assert.ok(!/ENOTFOUND|stack|at Object/i.test(JSON.stringify(r.body)), "raw transport error not forwarded");
+});
+
+await t("D-TEST-7: a successful test after a failure clears lastError", async () => {
+  const { app, api } = makeDeps();
+  const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
+  const h = { "x-csrf-token": token };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "tok" } });
+  const ok = await call(app, "POST", `${B}/test`, { headers: h, body: {} });
+  assert.equal(ok.body.connected, true);
+  const after = await call(app, "GET", B);
+  assert.ok(!after.body.connection.lastError, "lastError cleared on success");
+});
+
+await t("D-TEST-8: test requires admin + CSRF", async () => {
+  const { app } = makeDeps();
+  const noAdmin = await call(app, "POST", `${B}/test`, { headers: { _noAdmin: true } });
+  assert.equal(noAdmin.status, 401);
+  const noCsrf = await call(app, "POST", `${B}/test`, { body: {} });
+  assert.equal(noCsrf.status, 403);
+  const badCsrf = await call(app, "POST", `${B}/test`, { headers: { "x-csrf-token": "nope" }, body: {} });
+  assert.equal(badCsrf.status, 403);
 });
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);

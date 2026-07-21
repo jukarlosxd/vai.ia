@@ -85,6 +85,12 @@ function fakeSupabase() {
 }
 
 const mk = () => createTwilioStore({ supabase: fakeSupabase(), environment: "staging" });
+// Same store, but hands back the underlying fake DB so a test can corrupt a
+// stored value on purpose (e.g. simulate a ciphertext written with another key).
+const mkWithDb = () => {
+  const supabase = fakeSupabase();
+  return { store: createTwilioStore({ supabase, environment: "staging" }), db: supabase._tables };
+};
 
 console.log("── twilio-store ──");
 
@@ -120,9 +126,12 @@ await t("empty authToken on update PRESERVES the existing secret", async () => {
   assert.equal(creds.authToken, "tok-original");
 });
 
-await t("getDecryptedCredentials returns token server-side; throws DELIVERY_DISABLED when off", async () => {
+await t("getDecryptedCredentials returns token server-side; a fresh install is a CONFIGURATION error, not 'disconnected'", async () => {
   const s = mk();
-  await assert.rejects(() => s.getDecryptedCredentials(), e => e.code === "DELIVERY_DISABLED");
+  // Nothing saved yet. This is NOT an administrator disconnect — reporting it
+  // as DELIVERY_DISABLED ("Twilio integration disconnected") is what hid the
+  // real cause in staging. It must be a configuration error.
+  await assert.rejects(() => s.getDecryptedCredentials(), e => e.code === "DELIVERY_CONFIGURATION_ERROR");
   await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
   await s.setConnectionStatus({ status: "connected" });
   const creds = await s.getDecryptedCredentials();
@@ -172,6 +181,122 @@ await t("logMessage + updateMessageStatus + listMessages (SID masked, phones mas
   assert.equal(list[0].status, "sent");
   assert.ok(list[0].to.includes("••"), "phone masked");
   assert.ok(!JSON.stringify(list[0]).includes("SM_abcdef123456"), "full SID never exposed");
+});
+
+// ── connection-state semantics (the staging "disconnected" defect) ──────────
+// Root cause: a fresh integration row was created with status 'disconnected',
+// so ANY missing/broken credential was reported as an administrator disconnect
+// ("Twilio integration disconnected"), masking the real cause.
+
+await t("D-CONN-1: fresh integration is 'unconfigured', never 'disconnected'", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1" });          // SID only, no token
+  const view = await s.getConnection();
+  assert.notEqual(view.status, "disconnected", "a never-connected install must not claim admin disconnect");
+});
+
+await t("D-CONN-2: SID saved but token missing → 'Auth Token is not configured' (not 'disconnected')", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1" });
+  await assert.rejects(() => s.getDecryptedCredentials(), (e) => {
+    assert.equal(e.code, "DELIVERY_CONFIGURATION_ERROR");
+    assert.match(e.message, /Auth Token is not configured/i);
+    return true;
+  });
+});
+
+await t("D-CONN-3: saving both credentials moves status to 'saved' — saving is NOT connecting", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  const view = await s.getConnection();
+  assert.equal(view.status, "saved");
+  assert.equal(view.connected, false, "'saved' must never report connected");
+  assert.equal(view.hasToken, true);
+});
+
+await t("D-CONN-4: only an administrator Disconnect yields DELIVERY_DISABLED", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  await s.disconnect();
+  await assert.rejects(() => s.getDecryptedCredentials(), (e) => {
+    assert.equal(e.code, "DELIVERY_DISABLED");
+    assert.match(e.message, /administrator/i);
+    return true;
+  });
+});
+
+await t("D-CONN-5: undecryptable ciphertext → configuration error, credentials NOT wiped", async () => {
+  const { store: s, db } = mkWithDb();
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  await s.setConnectionStatus({ status: "saved" });
+  // Corrupt the stored bundle in place — this is exactly what a ciphertext
+  // written under a DIFFERENT INTEGRATIONS_ENCRYPTION_KEY looks like. Decrypt
+  // must fail closed, and must not destroy anything.
+  const row = db.twilio_connections[0];
+  assert.ok(row && row.auth_token_encrypted, "precondition: a ciphertext is stored");
+  row.auth_token_encrypted = "v1.zzzz.zzzz.zzzz";
+  await assert.rejects(() => s.getDecryptedCredentials(), (e) => {
+    assert.equal(e.code, "DELIVERY_CONFIGURATION_ERROR");
+    assert.match(e.message, /could not be decrypted/i);
+    return true;
+  });
+  const view = await s.getConnection();
+  assert.equal(view.hasToken, true, "a failed decrypt must NOT wipe the stored token");
+  assert.ok(view.accountSidMasked, "a failed decrypt must NOT hide the Account SID");
+  assert.equal(db.twilio_connections[0].auth_token_encrypted, "v1.zzzz.zzzz.zzzz", "row untouched");
+});
+
+await t("D-CONN-6: a failed test keeps SID + token and records a sanitized error", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  await s.setConnectionStatus({ status: "authentication_error", error: "Twilio rejected the saved credentials." });
+  const view = await s.getConnection();
+  assert.equal(view.status, "authentication_error");
+  assert.equal(view.connected, false);
+  assert.equal(view.hasToken, true, "failed test must not wipe the token");
+  assert.ok(view.accountSidMasked, "failed test must not hide the SID");
+  assert.ok(!JSON.stringify(view).includes("tok"), "no secret in the view");
+});
+
+await t("D-CONN-7: a successful test sets connected, stamps last_tested_at and clears last_error", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  await s.setConnectionStatus({ status: "authentication_error", error: "previous failure" });
+  await s.setConnectionStatus({ status: "connected", error: null });
+  const view = await s.getConnection();
+  assert.equal(view.status, "connected");
+  assert.equal(view.connected, true);
+  assert.ok(view.lastTestedAt, "last_tested_at stamped");
+  assert.ok(!view.lastError, "success clears the previous error");
+});
+
+await t("D-CONN-8: an empty authToken preserves the stored secret (placeholder is never stored)", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  await s.saveConnection({ accountSid: "AC1", authToken: "" });            // blank = keep
+  await s.saveConnection({ accountSid: "AC1", authToken: "   " });         // whitespace = keep
+  const creds = await s.getDecryptedCredentials();
+  assert.equal(creds.authToken, "tok", "blank/whitespace must never overwrite or clear the token");
+});
+
+await t("D-CONN-9: the token round-trips byte-for-byte (no trimming of a valid secret)", async () => {
+  const s = mk();
+  const real = "0123456789abcdef0123456789abcdef";                          // 32-char Twilio-shaped token
+  await s.saveConnection({ accountSid: "AC1", authToken: real });
+  const creds = await s.getDecryptedCredentials();
+  assert.equal(creds.authToken, real);
+  assert.equal(creds.authToken.length, 32);
+});
+
+await t("D-CONN-10: the public view never carries a secret in any state", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC1", authToken: "supersecrettoken" });
+  for (const st of ["saved", "connected", "authentication_error", "configuration_error", "network_error"]) {
+    await s.setConnectionStatus({ status: st, error: st === "connected" ? null : "sanitized" });
+    const raw = JSON.stringify(await s.getConnection());
+    assert.ok(!raw.includes("supersecrettoken"), `secret leaked in state ${st}`);
+    assert.ok(!/auth_token_encrypted|ciphertext/i.test(raw), `ciphertext leaked in state ${st}`);
+  }
 });
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);

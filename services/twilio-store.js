@@ -115,7 +115,7 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
     if (!integ) {
       const { data, error } = await supabase.from("app_integrations")
         .insert({ provider: "twilio", scope: "platform", tenant_slug: null, environment: ENV,
-                  enabled: false, status: "disconnected", updated_at: nowISO })
+                  enabled: false, status: "unconfigured", updated_at: nowISO })
         .select().single();
       if (error) throw new Error("twilio-store: cannot create integration");
       integ = data;
@@ -145,6 +145,19 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
       const { error } = await supabase.from("twilio_connections").insert(row);
       if (error) throw new Error("twilio-store: cannot insert connection");
     }
+
+    // Saving is NOT connecting. When both credentials are now present we move
+    // the integration out of 'unconfigured'/'disconnected'/<error> into
+    // 'saved' — a state that means "stored, not yet verified". Only a
+    // successful Test Connection may set 'connected'/'test_mode', and only an
+    // administrator's Disconnect may set 'disconnected'.
+    const after = await _loadConnectionRow(integ.id);
+    const complete = !!(after?.account_sid && after?.auth_token_encrypted);
+    if (complete && integ.status !== "connected" && integ.status !== "test_mode") {
+      await supabase.from("app_integrations")
+        .update({ status: "saved", enabled: false, last_error: null, updated_at: nowISO })
+        .eq("id", integ.id);
+    }
     return getConnection();
   }
 
@@ -152,9 +165,12 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
   async function setConnectionStatus({ status, error = null, testMode = null }) {
     const integ = await _loadIntegrationRow();
     if (!integ) return;
+    const ok = status === "connected" || status === "test_mode";
     const patch = {
-      status, enabled: status === "connected" || status === "test_mode",
-      last_tested_at: new Date().toISOString(), last_error: error, updated_at: new Date().toISOString(),
+      status, enabled: ok,
+      last_tested_at: new Date().toISOString(),
+      last_error: ok ? null : (error || null),      // success always clears the previous error
+      updated_at: new Date().toISOString(),
     };
     await supabase.from("app_integrations").update(patch).eq("id", integ.id);
   }
@@ -175,23 +191,39 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
   // return this shape from a route. Throws if not configured / decrypt fails.
   async function getDecryptedCredentials() {
     const integ = await _loadIntegrationRow();
-    if (!integ) throw makeErr("DELIVERY_DISABLED", "Twilio integration not connected");
+    if (!integ) throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio is not configured yet.");
+
+    // DELIVERY_DISABLED means "an administrator turned this off" — it is NEVER
+    // used to describe a missing or broken credential. Deciding this from the
+    // integration status alone was the bug: a fresh row is 'unconfigured' /
+    // 'disconnected' by construction, so every missing-token case reported
+    // "Twilio integration disconnected" and hid the real cause.
+    if (integ.status === "disconnected") {
+      throw makeErr("DELIVERY_DISABLED", "Twilio was disconnected by an administrator.");
+    }
+
     const conn = await _loadConnectionRow(integ.id);
-    // Credentials must be present to build a client. We deliberately do NOT
-    // require integ.enabled here, so a freshly-saved connection can be TESTED
-    // before it is marked connected. A wiped/disconnected integration (token
-    // cleared) surfaces as DELIVERY_DISABLED; a half-filled one as
-    // CONFIGURATION_ERROR. The per-tenant SMS-enabled gate is enforced by the
-    // send path via the returned `smsEnabled`.
-    if (!conn?.account_sid || !conn?.auth_token_encrypted) {
-      if (integ.status === "disconnected" && !integ.enabled) {
-        throw makeErr("DELIVERY_DISABLED", "Twilio integration disconnected");
-      }
-      throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio credentials incomplete");
+    // We deliberately do NOT require integ.enabled here, so a freshly-saved
+    // connection can be TESTED before it is marked connected. Each missing
+    // piece gets its own precise, sanitized message.
+    if (!conn || (!conn.account_sid && !conn.auth_token_encrypted)) {
+      throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio is not configured yet.");
+    }
+    if (!conn.account_sid) {
+      throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio Account SID is not configured.");
+    }
+    if (!conn.auth_token_encrypted) {
+      throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio Auth Token is not configured.");
     }
     let authToken;
     try { authToken = crypto.decryptSecret(conn.auth_token_encrypted); }
-    catch { throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio credentials could not be decrypted"); }
+    catch {
+      throw makeErr("DELIVERY_CONFIGURATION_ERROR",
+        "The stored Twilio credentials could not be decrypted. Save the connection again.");
+    }
+    if (!authToken) {
+      throw makeErr("DELIVERY_CONFIGURATION_ERROR", "Twilio Auth Token is not configured.");
+    }
     return { accountSid: conn.account_sid, authToken, testMode: conn.test_mode, smsEnabled: conn.sms_enabled };
   }
 

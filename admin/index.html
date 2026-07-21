@@ -674,20 +674,40 @@ async function twApi(path,{method='GET',body=null}={}){
   let j=null;try{j=await r.json();}catch{}
   return {status:r.status,body:j};
 }
-function twBusy(on){document.querySelectorAll('#panel-twilio button').forEach(b=>b.disabled=!!on);}
+let twInFlight=false;
+function twBusy(on){twInFlight=!!on;document.querySelectorAll('#panel-twilio button').forEach(b=>b.disabled=!!on);if(!on)twApplyGating();}
+// Buttons that need a stored connection are genuinely disabled — not just
+// styled grey. Recomputed from the server response after every request and
+// after every reload, so a stale in-memory state can never re-enable them.
+function twApplyGating(){
+  const c=twConn||{};
+  const hasConn=!!(c.accountSidMasked&&c.hasToken);
+  [['tw-btn-test',hasConn],['tw-btn-numbers',hasConn],['tw-btn-disc',!!(c.accountSidMasked||c.hasToken)],['tw-btn-send',hasConn]]
+    .forEach(([id,enabled])=>{const b=document.getElementById(id);if(!b)return;b.disabled=!enabled;b.style.opacity=enabled?'':'0.45';b.style.cursor=enabled?'':'not-allowed';
+      b.title=enabled?'':'Save an Account SID and an Auth Token first';});
+}
 async function loadTwilio(){
   const r=await twApi('');
-  if(r.status!==200){document.getElementById('tw-conn-status').textContent='Unable to load (admin only).';return;}
+  if(r.status!==200){document.getElementById('tw-conn-status').textContent='Unable to load (admin only).';twConn=null;twApplyGating();return;}
   twCsrf=r.body.csrfToken;
   const c=r.body.connection||{};
+  twConn=c;                                   // authoritative state for the gating
+  const label=({unconfigured:'not configured',saved:'saved — not tested yet',connected:'connected',
+    test_mode:'connected (test mode)',authentication_error:'authentication error',
+    configuration_error:'configuration error',network_error:'network error',
+    disconnected:'disconnected by an administrator'})[c.status]||c.status||'not configured';
   document.getElementById('tw-conn-status').innerHTML=
-    'Status: <b>'+twEsc(c.status||'disconnected')+'</b> · Account: '+twEsc(c.accountSidMasked||'—')+
+    'Status: <b>'+twEsc(label)+'</b> · Account: '+twEsc(c.accountSidMasked||'—')+
+    ' · Token: '+(c.hasToken?'configured':'<span style="color:#f87171">not set</span>')+
     ' · Env: '+twEsc(c.environment||'staging')+
     (c.lastTestedAt?(' · Last tested: '+twEsc(new Date(c.lastTestedAt).toLocaleString())):'')+
     (c.lastError?(' · <span style="color:#f87171">'+twEsc(c.lastError)+'</span>'):'');
   document.getElementById('tw-sid').value=''; // never prefill; masked shown above
   document.getElementById('tw-sid').placeholder=c.accountSidMasked||'AC…';
-  document.getElementById('tw-tok').value='';  // NEVER load the token into the DOM
+  // NEVER load the token into the DOM. A token the admin is still typing (e.g.
+  // after a failed save) is preserved so a reload does not destroy it.
+  const tokEl=document.getElementById('tw-tok');
+  if(!tokEl.value)tokEl.value='';
   document.getElementById('tw-tok-state').textContent=c.hasToken?'(Configured — leave blank to keep)':'(not set)';
   document.getElementById('tw-from').value=c.defaultFromNumber||'';
   document.getElementById('tw-msvc').value=c.messagingServiceSid||'';
@@ -695,10 +715,11 @@ async function loadTwilio(){
   document.getElementById('tw-testMode').checked=c.testMode!==false;
   document.getElementById('tw-inbound').checked=c.inboundEnabled!==false;
   document.getElementById('tw-callbacks').checked=c.statusCallbacksEnabled!==false;
+  twApplyGating();
   twLoadAssignments();twLoadLogs(0);
 }
 async function twSaveConnection(){
-  twBusy(true);
+  if(twInFlight)return;                       // a second click is a no-op
   const body={
     accountSid:document.getElementById('tw-sid').value.trim()||undefined,
     authToken:document.getElementById('tw-tok').value,   // blank → server keeps existing
@@ -709,13 +730,34 @@ async function twSaveConnection(){
     inboundEnabled:document.getElementById('tw-inbound').checked,
     statusCallbacksEnabled:document.getElementById('tw-callbacks').checked,
   };
-  const r=await twApi('/connect',{method:'POST',body});
-  twBusy(false);
-  document.getElementById('tw-tok').value='';  // clear entered secret from the DOM
-  showToast(r.status===200?'Connection saved':(r.body?.error?.message||'Save failed'),r.status===200?'success':'error');
-  if(r.status===200)loadTwilio();
+  twBusy(true);
+  let r;
+  try{ r=await twApi('/connect',{method:'POST',body}); }
+  catch(e){ r={status:0,body:null}; }
+  finally{ twBusy(false); }                   // never leave the panel stuck
+  const ok=r.status===200;
+  // Only destroy the typed secret once the server confirms it stored it.
+  // Clearing it on failure was the data-loss bug: the SID persisted, the token
+  // did not, and the next Save silently sent an empty token.
+  if(ok)document.getElementById('tw-tok').value='';
+  showToast(ok?'Connection saved':(r.body?.error?.message||(r.status===0?'Network error — the token was kept in the field, try again':'Save failed')),ok?'success':'error');
+  await loadTwilio();                         // always recompute state from the server
 }
-async function twTestConnection(){twBusy(true);const r=await twApi('/test',{method:'POST',body:{}});twBusy(false);showToast(r.status===200?('Connection OK ('+twEsc(r.body.status)+')'):(r.body?.error?.message||'Test failed'),r.status===200?'success':'error');loadTwilio();}
+async function twTestConnection(){
+  if(twInFlight)return;
+  const btn=document.getElementById('tw-btn-test');
+  if(btn&&btn.disabled)return;                // honour the real disabled state
+  const label=btn?btn.textContent:'';
+  twBusy(true); if(btn)btn.textContent='Testing…';
+  let r;
+  try{ r=await twApi('/test',{method:'POST',body:{}}); }
+  catch(e){ r={status:0,body:null}; }
+  finally{ twBusy(false); if(btn)btn.textContent=label||'Test Connection'; }
+  const b=r.body||{};
+  if(r.status===200&&b.connected)showToast('Connected ('+twEsc(b.status||'connected')+')','success');
+  else showToast(twEsc(b.error||(r.status===0?'Could not reach the server':'Test failed')),'error');
+  await loadTwilio();                         // re-render from the authoritative GET
+}
 async function twDisconnect(){if(!confirm('Disconnect Twilio? Stored credentials will be wiped (logs are kept).'))return;twBusy(true);const r=await twApi('/disconnect',{method:'POST',body:{}});twBusy(false);showToast(r.status===200?'Disconnected':'Failed',r.status===200?'success':'error');loadTwilio();}
 async function twRefreshNumbers(){twBusy(true);const r=await twApi('/numbers');twBusy(false);const el=document.getElementById('tw-numbers');if(r.status!==200){el.textContent=r.body?.error?.message||'Could not list numbers';return;}el.innerHTML=(r.body.numbers||[]).map(n=>twEsc(n.phoneNumber)+' — '+(n.smsCapable?'SMS':'no-SMS')+(n.voiceCapable?' · Voice':'')).join('<br>')||'No numbers';}
 async function twLoadAssignments(){const r=await twApi('/assignments');const b=document.getElementById('tw-asg-body');if(r.status!==200){b.innerHTML='';return;}b.innerHTML=(r.body.assignments||[]).map(a=>'<tr><td>'+twEsc(a.tenantSlug)+'</td><td>'+twEsc(a.phoneMasked)+'</td><td>'+(a.smsEnabled?'✓':'—')+'</td><td>'+(a.voiceEnabled?'✓':'—')+'</td><td>'+twEsc(a.mode)+'</td><td>'+twEsc(a.status)+'</td><td>'+twEsc(a.lastMessageAt?new Date(a.lastMessageAt).toLocaleString():'—')+'</td><td><button class="save-btn" style="padding:3px 8px;background:rgba(248,113,113,.12);color:#f87171" onclick="twDelAssign(\''+twEsc(a.id)+'\')">×</button></td></tr>').join('')||'<tr><td colspan=8 style="color:var(--muted)">No assignments</td></tr>';}

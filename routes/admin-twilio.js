@@ -95,11 +95,23 @@ export function mountAdminTwilio(app, deps) {
   // ── Test connection against the Twilio API ─────────────────────────────────
   app.post(`${base}/test`, ...writeGuards, async (req, res) => {
     try {
+      // The test NEVER takes credentials from the request body — it always uses
+      // the persisted, server-side-decrypted connection.
       let creds;
       try { creds = await store.getDecryptedCredentials(); }
       catch (e) {
-        await store.setConnectionStatus({ status: "error", error: safeMsg(e) });
-        return jerr(res, 400, e.code || "DELIVERY_CONFIGURATION_ERROR", safeMsg(e));
+        // A local problem (missing/undecryptable credentials) or an explicit
+        // admin disconnect. Either way: never wipe what is stored.
+        const status = e.code === "DELIVERY_DISABLED" ? "disconnected" : "configuration_error";
+        await store.setConnectionStatus({ status, error: safeMsg(e) });
+        const view = await store.getConnection();
+        return res.status(400).json({
+          ok: false, connected: false, status,
+          accountMasked: view.accountSidMasked || null,
+          hasToken: !!view.hasToken,
+          lastTestedAt: view.lastTestedAt || null,
+          error: safeMsg(e),
+        });
       }
       try {
         const client = twilioClientFactory(creds.accountSid, creds.authToken);
@@ -107,12 +119,26 @@ export function mountAdminTwilio(app, deps) {
         const status = creds.testMode ? "test_mode" : "connected";
         await store.setConnectionStatus({ status, error: null });
         await audit(req, "connection_tested", { result: "ok" });
-        res.json({ ok: true, status, accountStatus: acct?.status || "active", accountType: acct?.type || null });
+        const view = await store.getConnection();
+        res.json({
+          ok: true, connected: true, status,
+          accountMasked: view.accountSidMasked || null,
+          hasToken: !!view.hasToken,
+          lastTestedAt: view.lastTestedAt || null,
+          accountStatus: acct?.status || "active", accountType: acct?.type || null,
+        });
       } catch (e) {
-        const msg = safeTwilioError(e);
-        await store.setConnectionStatus({ status: "error", error: msg });
+        const { status, message } = classifyTwilioFailure(e);
+        await store.setConnectionStatus({ status, error: message });
         await audit(req, "connection_tested", { result: "fail" });
-        jerr(res, 400, "TWILIO_AUTH_ERROR", msg);
+        const view = await store.getConnection();
+        res.status(400).json({
+          ok: false, connected: false, status,
+          accountMasked: view.accountSidMasked || null,   // a failed test never hides the SID
+          hasToken: !!view.hasToken,                      // …and never wipes the token
+          lastTestedAt: view.lastTestedAt || null,
+          error: message,
+        });
       }
     } catch (e) { console.error("[TWILIO-API] test:", e.message); jerr(res, 500, "INTERNAL_ERROR", "test failed"); }
   });
@@ -241,6 +267,28 @@ export function mountAdminTwilio(app, deps) {
 // helpers — always return safe, secret-free messages
 function mask(v, n = 4) { const s = String(v || ""); return s ? "••••" + s.slice(-n) : null; }
 function safeMsg(e) { return (e && e.message ? String(e.message) : "error").slice(0, 160); }
+// Map a Twilio SDK / transport failure onto our status vocabulary and a
+// sanitized, actionable message. The raw provider error is NEVER forwarded:
+// it can echo request details, and its wording changes between SDK versions.
+export function classifyTwilioFailure(e) {
+  const code = Number(e?.code) || 0;
+  const httpStatus = Number(e?.status) || 0;
+  const sysErr = String(e?.errno || e?.cause?.code || e?.code || "");
+
+  // 20003 = authenticate failed; 20404 on the account resource means the SID
+  // does not belong to these credentials. Both are credential problems.
+  if (code === 20003 || code === 20005 || httpStatus === 401 || httpStatus === 403) {
+    return { status: "authentication_error", message: "Twilio rejected the saved credentials." };
+  }
+  if (code === 20404 || httpStatus === 404) {
+    return { status: "authentication_error", message: "Twilio could not find this account for the saved credentials." };
+  }
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ECONNRESET|ABORT/i.test(sysErr) || httpStatus >= 500) {
+    return { status: "network_error", message: "Could not reach Twilio. Try again." };
+  }
+  return { status: "network_error", message: "The Twilio request failed. Try again." };
+}
+
 function safeTwilioError(e) {
   // Twilio errors have .code + .message; expose only a short, non-sensitive form.
   const code = e?.code ? ` (code ${e.code})` : "";

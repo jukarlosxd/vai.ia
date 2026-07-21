@@ -685,6 +685,12 @@ function twApplyGating(){
   [['tw-btn-test',hasConn],['tw-btn-numbers',hasConn],['tw-btn-disc',!!(c.accountSidMasked||c.hasToken)],['tw-btn-send',hasConn]]
     .forEach(([id,enabled])=>{const b=document.getElementById(id);if(!b)return;b.disabled=!enabled;b.style.opacity=enabled?'':'0.45';b.style.cursor=enabled?'':'not-allowed';
       b.title=enabled?'':'Save an Account SID and an Auth Token first';});
+  // Make it obvious when the token is REQUIRED (nothing stored yet) versus
+  // optional (blank keeps the stored secret).
+  const tok=document.getElementById('tw-tok');
+  if(tok){const need=!c.hasToken;
+    tok.placeholder=need?'required — paste the Twilio Auth Token':'(hidden — leave blank to keep)';
+    tok.style.borderColor=need?'var(--danger,#e5534b)':'';}
 }
 async function loadTwilio(){
   const r=await twApi('');
@@ -720,8 +726,19 @@ async function loadTwilio(){
 }
 async function twSaveConnection(){
   if(twInFlight)return;                       // a second click is a no-op
+  // A blank token means "keep the stored one" — but only if one IS stored.
+  // Saving a SID with no token and nothing stored silently produced a
+  // half-configured connection that could never be tested. Stop it here, and
+  // the server enforces the same rule independently.
+  const sidTyped=document.getElementById('tw-sid').value.trim();
+  const tokTyped=document.getElementById('tw-tok').value.trim();
+  if(sidTyped&&!tokTyped&&!(twConn&&twConn.hasToken)){
+    showToast('Auth Token is required the first time you connect.','error');
+    document.getElementById('tw-tok').focus();
+    return;
+  }
   const body={
-    accountSid:document.getElementById('tw-sid').value.trim()||undefined,
+    accountSid:sidTyped||undefined,
     authToken:document.getElementById('tw-tok').value,   // blank → server keeps existing
     defaultFromNumber:document.getElementById('tw-from').value.trim()||undefined,
     messagingServiceSid:document.getElementById('tw-msvc').value.trim()||undefined,

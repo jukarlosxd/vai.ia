@@ -394,6 +394,27 @@ async function deletePending(token) {
 // --- app ---
 const app = express();
 
+// ─── PROXY TRUST ────────────────────────────────────────────────────────────
+// Render terminates TLS and forwards over HTTP, adding X-Forwarded-For and
+// X-Forwarded-Proto. Without this, Express reports req.ip as the proxy's
+// address and req.secure as false, which:
+//   * makes express-rate-limit key every visitor to the SAME address (one
+//     abusive client can exhaust the limit for everyone) and emit
+//     ERR_ERL_UNEXPECTED_X_FORWARDED_FOR, and
+//   * breaks `secure` cookie decisions and any req.protocol-based URL building.
+//
+// The value is a HOP COUNT, never `true`. Trusting every hop would let a
+// client forge X-Forwarded-For and defeat per-IP rate limiting entirely.
+// Render puts exactly one proxy in front of the service, so 1 is correct.
+const TRUST_PROXY_HOPS = (() => {
+  const raw = String(process.env.TRUST_PROXY ?? "").trim();
+  if (!raw) return 0;                       // no proxy (local dev)
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 1;   // "1"/"true"/anything set → 1 hop
+})();
+app.set("trust proxy", TRUST_PROXY_HOPS);
+console.log(`[STARTUP] trust proxy = ${TRUST_PROXY_HOPS} hop(s)`);
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

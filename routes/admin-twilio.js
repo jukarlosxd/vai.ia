@@ -81,6 +81,22 @@ export function mountAdminTwilio(app, deps) {
       if (b.defaultFromNumber && !normalizeE164(b.defaultFromNumber)) {
         return jerr(res, 400, "VALIDATION_ERROR", "default from number is not a valid phone number");
       }
+
+      // A first-time connect that carries an Account SID but no Auth Token used
+      // to "succeed": the SID was stored, the token was not, and the result was
+      // a half-configured connection that could never be tested. Saving must
+      // never silently drop half of a credential pair.
+      // (A blank token is still legitimate LATER — it means "keep the stored
+      // one" — so this only fires when nothing is stored yet.)
+      const suppliedSid = (b.accountSid ?? "").toString().trim();
+      const suppliedToken = (b.authToken ?? "").toString().trim();
+      if (suppliedSid && !suppliedToken) {
+        const current = await store.getConnection();
+        if (!current?.hasToken) {
+          return jerr(res, 400, "VALIDATION_ERROR",
+            "Auth Token is required the first time you connect. Paste the Auth Token and save again.");
+        }
+      }
       const view = await store.saveConnection({
         accountSid: b.accountSid, authToken: b.authToken, apiKeySid: b.apiKeySid, apiKeySecret: b.apiKeySecret,
         messagingServiceSid: b.messagingServiceSid, defaultFromNumber: b.defaultFromNumber,

@@ -233,11 +233,18 @@ await t("D-TEST-3: a failed test preserves the Account SID and the stored token"
   assert.equal(after.body.connection.hasToken, true, "GET still reports a stored token");
 });
 
-await t("D-TEST-4: token never saved → configuration_error naming the Auth Token", async () => {
-  const { app, api } = makeDeps();
+await t("D-TEST-4: a legacy half-configured row (SID, no token) → configuration_error naming the Auth Token", async () => {
+  const { app, api, supabase } = makeDeps();
   const token = api.makeCsrf({ id: "a1", email: "admin@x.com" });
   const h = { "x-csrf-token": token };
-  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID } });   // SID only
+  // The API now refuses to CREATE this state (D-SAVE-1), but rows like this
+  // already exist in staging from before that guard. Seed it directly so the
+  // test endpoint's behaviour on legacy data stays covered.
+  supabase._tables.app_integrations.push({ id: "int-legacy", provider: "twilio", scope: "platform",
+    tenant_slug: null, environment: "staging", enabled: false, status: "error",
+    last_error: "Twilio integration disconnected" });
+  supabase._tables.twilio_connections.push({ id: "conn-legacy", integration_id: "int-legacy",
+    account_sid: SID, auth_token_encrypted: null, test_mode: true, sms_enabled: true });
   const r = await call(app, "POST", `${B}/test`, { headers: h, body: {} });
   assert.equal(r.status, 400);
   assert.equal(r.body.status, "configuration_error");
@@ -287,6 +294,54 @@ await t("D-TEST-8: test requires admin + CSRF", async () => {
   assert.equal(noCsrf.status, 403);
   const badCsrf = await call(app, "POST", `${B}/test`, { headers: { "x-csrf-token": "nope" }, body: {} });
   assert.equal(badCsrf.status, 403);
+});
+
+// ── the silent half-save (observed live in staging) ─────────────────────────
+// A first connect carrying an Account SID but a blank Auth Token returned 200
+// and logged connect_saved, while storing only the SID. The connection could
+// then never be tested, and the UI had no way to say why.
+
+await t("D-SAVE-1: first connect with a SID but no token is REJECTED, not silently half-saved", async () => {
+  const { app, api, supabase } = makeDeps();
+  const h = { "x-csrf-token": api.makeCsrf({ id: "a1", email: "admin@x.com" }) };
+  const r = await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "" } });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error.message, /Auth Token is required the first time/i);
+  assert.equal(supabase._tables.twilio_connections.length, 0, "nothing half-written");
+});
+
+await t("D-SAVE-2: whitespace-only token counts as absent on a first connect", async () => {
+  const { app, api } = makeDeps();
+  const h = { "x-csrf-token": api.makeCsrf({ id: "a1", email: "admin@x.com" }) };
+  const r = await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "   " } });
+  assert.equal(r.status, 400);
+});
+
+await t("D-SAVE-3: once a token IS stored, a blank token still means 'keep it'", async () => {
+  const { app, api } = makeDeps();
+  const h = { "x-csrf-token": api.makeCsrf({ id: "a1", email: "admin@x.com" }) };
+  await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "tok" } });
+  const r = await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "" } });
+  assert.equal(r.status, 200, "blank is legitimate once a secret exists");
+  assert.equal(r.body.connection.hasToken, true, "stored secret preserved");
+});
+
+await t("D-SAVE-4: a config-only save (no SID) is unaffected by the rule", async () => {
+  const { app, api } = makeDeps();
+  const h = { "x-csrf-token": api.makeCsrf({ id: "a1", email: "admin@x.com" }) };
+  const r = await call(app, "POST", `${B}/connect`, { headers: h, body: { smsEnabled: true, testMode: true } });
+  assert.equal(r.status, 200);
+});
+
+await t("D-SAVE-5: a complete first connect succeeds and lands in 'saved'", async () => {
+  const { app, api } = makeDeps();
+  const h = { "x-csrf-token": api.makeCsrf({ id: "a1", email: "admin@x.com" }) };
+  const r = await call(app, "POST", `${B}/connect`, { headers: h, body: { accountSid: SID, authToken: "realtoken" } });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.connection.status, "saved");
+  assert.equal(r.body.connection.hasToken, true);
+  assert.equal(r.body.connection.connected, false, "'saved' is not 'connected'");
+  assert.ok(!JSON.stringify(r.body).includes("realtoken"));
 });
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);

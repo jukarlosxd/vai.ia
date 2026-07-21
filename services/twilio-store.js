@@ -154,9 +154,17 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
     const after = await _loadConnectionRow(integ.id);
     const complete = !!(after?.account_sid && after?.auth_token_encrypted);
     if (complete && integ.status !== "connected" && integ.status !== "test_mode") {
-      await supabase.from("app_integrations")
+      const { error: dbError } = await supabase.from("app_integrations")
         .update({ status: "saved", enabled: false, last_error: null, updated_at: nowISO })
         .eq("id", integ.id);
+      // Same rule as setConnectionStatus: never report a save as complete when
+      // the status transition was rejected by the database.
+      if (dbError) {
+        const detail = dbError.code === "23514"
+          ? "status 'saved' is rejected by the database CHECK constraint — migration 004 has not been applied"
+          : (dbError.code || "unknown");
+        throw new Error(`twilio-store: credentials stored but status could not be updated (${detail})`);
+      }
     }
     return getConnection();
   }
@@ -172,7 +180,17 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
       last_error: ok ? null : (error || null),      // success always clears the previous error
       updated_at: new Date().toISOString(),
     };
-    await supabase.from("app_integrations").update(patch).eq("id", integ.id);
+    // A rejected write MUST NOT look like success. Swallowing this error is how
+    // a CHECK-constraint violation on `status` (the new state vocabulary was
+    // not yet allowed by the schema) silently froze the connection at its last
+    // legal value while every caller believed the update had landed.
+    const { error: dbError } = await supabase.from("app_integrations").update(patch).eq("id", integ.id);
+    if (dbError) {
+      const detail = dbError.code === "23514"
+        ? `status '${status}' is rejected by the database CHECK constraint — migration 004 has not been applied`
+        : (dbError.code || "unknown");
+      throw new Error(`twilio-store: cannot persist connection status (${detail})`);
+    }
   }
 
   // Disconnect: disable + wipe usable secrets (leave a tombstone status).

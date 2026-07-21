@@ -44,12 +44,19 @@ function fakeSupabase() {
               const dup = t.find(x => x.message_sid === r.message_sid && x.event_type === r.event_type && (x.message_status ?? null) === (r.message_status ?? null));
               if (dup) return { data: null, error: { code: "23505", message: "duplicate" } };
             }
+            // CHECK (status IN (...)) on app_integrations — see migration 004
+            if (name === "app_integrations" && r.status !== undefined && !ALLOWED_STATUS.has(r.status)) {
+              return { data: null, error: { code: "23514", message: `violates check constraint (status='${r.status}')` } };
+            }
             const rec = { id: uuid(), created_at: new Date().toISOString(), ...r };
             t.push(rec); created.push(rec);
           }
           return { data: created, error: null };
         }
         if (p?.op === "update") {
+          if (name === "app_integrations" && p.row.status !== undefined && !ALLOWED_STATUS.has(p.row.status)) {
+            return { data: null, error: { code: "23514", message: `violates check constraint (status='${p.row.status}')` } };
+          }
           const affected = t.filter(r => api._match(r));
           affected.forEach(r => Object.assign(r, p.row));
           return { data: affected, error: null };
@@ -83,6 +90,16 @@ function fakeSupabase() {
   }
   return { from, _tables: tables };
 }
+
+// The real schema constrains app_integrations.status. The fake used to accept
+// ANY value, so a state vocabulary the database rejects looked perfectly fine
+// in tests while silently freezing the row in staging. The fake now enforces
+// the same CHECK, and ALLOWED_STATUS is kept in lockstep with migration 004.
+const ALLOWED_STATUS = new Set([
+  "unconfigured", "saved", "testing", "connected", "test_mode",
+  "authentication_error", "configuration_error", "network_error",
+  "disconnected", "error",
+]);
 
 const mk = () => createTwilioStore({ supabase: fakeSupabase(), environment: "staging" });
 // Same store, but hands back the underlying fake DB so a test can corrupt a
@@ -297,6 +314,36 @@ await t("D-CONN-10: the public view never carries a secret in any state", async 
     assert.ok(!raw.includes("supersecrettoken"), `secret leaked in state ${st}`);
     assert.ok(!/auth_token_encrypted|ciphertext/i.test(raw), `ciphertext leaked in state ${st}`);
   }
+});
+
+// ── the schema/vocabulary mismatch (observed live in staging) ───────────────
+// Every state the code writes must be permitted by the CHECK constraint, and a
+// rejected write must surface as an error instead of silently freezing the row.
+
+await t("D-SCHEMA-1: every status the store can write is allowed by the schema", async () => {
+  for (const st of ["unconfigured", "saved", "connected", "test_mode",
+                    "authentication_error", "configuration_error", "network_error", "disconnected"]) {
+    assert.ok(ALLOWED_STATUS.has(st), `status '${st}' is written by the code but rejected by migration 004`);
+  }
+});
+
+await t("D-SCHEMA-2: a CHECK violation on status THROWS — it never looks like success", async () => {
+  const { store: s, db } = mkWithDb();
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  await assert.rejects(
+    () => s.setConnectionStatus({ status: "not_a_real_state", error: null }),
+    (e) => { assert.match(e.message, /cannot persist connection status/i); return true; },
+    "a rejected status write must throw, not be swallowed",
+  );
+  // and the stored row must be unchanged
+  assert.notEqual(db.app_integrations[0].status, "not_a_real_state");
+});
+
+await t("D-SCHEMA-3: saveConnection reports failure when the 'saved' transition is rejected", async () => {
+  const supabase = fakeSupabase();
+  const s = createTwilioStore({ supabase, environment: "staging" });
+  await s.saveConnection({ accountSid: "AC1", authToken: "tok" });
+  assert.equal(supabase._tables.app_integrations[0].status, "saved", "normal path still reaches 'saved'");
 });
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);

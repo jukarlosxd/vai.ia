@@ -133,6 +133,57 @@ console.log("\n[status callback]");
   t("unknown MessageSid → safe response (no 500)", unknown.status === 200, "status " + unknown.status);
 }
 
+// ── idempotency, verified with SIDs the operator can check in the database ──
+// The HTTP status is 200 either way, so it proves nothing on its own. These
+// SIDs are printed so the exact rows can be counted in Supabase afterwards.
+console.log("\n[idempotency — verify these SIDs in the database]");
+const seqSid = uniq();
+const conSid = uniq();
+const sepSid = uniq();
+{
+  // A) sequential replay of a brand-new SID
+  const p = inboundPayload({ MessageSid: seqSid });
+  const a1 = await post("/webhooks/twilio/sms/incoming", p);
+  const a2 = await post("/webhooks/twilio/sms/incoming", p);
+  t("sequential replay: both requests answered safely", a1.status === 200 && a2.status === 200,
+    `${a1.status}/${a2.status}`);
+
+  // B) concurrent replay — the race a retrying carrier actually creates
+  const p2 = inboundPayload({ MessageSid: conSid });
+  const [c1, c2] = await Promise.all([
+    post("/webhooks/twilio/sms/incoming", p2),
+    post("/webhooks/twilio/sms/incoming", p2),
+  ]);
+  t("concurrent replay: both requests answered safely", c1.status === 200 && c2.status === 200,
+    `${c1.status}/${c2.status}`);
+
+  // C) the same SID must still accept DIFFERENT event types / statuses:
+  //    one inbound + one callback per distinct status, and a repeat of one
+  //    status must not add a row.
+  const p3 = inboundPayload({ MessageSid: sepSid });
+  await post("/webhooks/twilio/sms/incoming", p3);
+  for (const st of ["queued", "sent", "delivered"]) {
+    await post("/webhooks/twilio/sms/status", { MessageSid: sepSid, MessageStatus: st, AccountSid: "AC" + "0".repeat(32) });
+  }
+  const dup = await post("/webhooks/twilio/sms/status", { MessageSid: sepSid, MessageStatus: "delivered", AccountSid: "AC" + "0".repeat(32) });
+  t("separation: inbound + 3 distinct statuses + 1 repeat answered safely", dup.status === 200, "status " + dup.status);
+}
+
+console.log("\n   Run this in Supabase staging (expected counts in the comments):");
+console.log(`   SELECT message_sid, event_type, message_status, count(*)
+   FROM   public.twilio_webhook_events
+   WHERE  message_sid IN ('${seqSid}','${conSid}','${sepSid}')
+   GROUP  BY 1,2,3 ORDER BY 1,2,3;
+   -- ${seqSid}: exactly 1 row  (inbound, NULL)
+   -- ${conSid}: exactly 1 row  (inbound, NULL)   <- the concurrency case
+   -- ${sepSid}: 4 rows (inbound NULL / status queued / sent / delivered), each count = 1
+
+   SELECT twilio_sid, direction, tenant_slug, count(*)
+   FROM   public.twilio_message_logs
+   WHERE  twilio_sid IN ('${seqSid}','${conSid}','${sepSid}')
+   GROUP  BY 1,2,3 ORDER BY 1;
+   -- one inbound row per SID, tenant_slug = solar-panel`);
+
 // ── blast radius ────────────────────────────────────────────────────────────
 console.log("\n[blast radius]");
 t("only the staging host was contacted", [...contacted].every((h) => !PROD_HOSTS.includes(h)), [...contacted].join(","));

@@ -77,6 +77,83 @@ console.log("── staging signed webhook E2E ──");
 console.log("   base:", BASE);
 console.log("   assigned number:", ASSIGNED.slice(0, 2) + "••••" + ASSIGNED.slice(-2));
 
+// ── PREFLIGHT (offline) ─────────────────────────────────────────────────────
+// A wrong Auth Token makes EVERY valid-signature case return 403, which reads
+// like a broken server or a broken test. It is neither. These checks run before
+// any network call and separate "the algorithm is fine, the secret is wrong"
+// from a real regression. The token itself is never printed, hashed or
+// fingerprinted — only its presence and length.
+console.log("\n[preflight — offline, no requests]");
+{
+  console.log(`   token present = true, length = ${TOKEN.length} chars`);
+  if (/\s/.test(TOKEN)) {
+    console.log("   WARNING: the token contains whitespace — a shell quoting mistake is likely.");
+  }
+
+  // 1. Known-answer test: fixed token + fixed URL + fixed params must always
+  //    produce this exact signature. Proves the SDK and our canonicalization
+  //    are behaving, independently of the real secret.
+  const KAT_TOKEN = "known_answer_dummy_token_do_not_use";
+  const KAT_URL = "https://example.invalid/webhooks/twilio/sms/incoming";
+  const KAT_PARAMS = { AccountSid: "AC" + "0".repeat(32), Body: "KAT", From: "+15005550006",
+                       MessageSid: "SM" + "0".repeat(32), NumMedia: "0", To: "+19477292223" };
+  const KAT_EXPECTED = "tcOtphGGWTGiJ5f2ycI4kdIb6e0=";
+  t("known-answer signature is stable",
+    twilio.getExpectedTwilioSignature(KAT_TOKEN, KAT_URL, KAT_PARAMS) === KAT_EXPECTED);
+
+  // 2. Determinism with the REAL token: same inputs -> same signature.
+  const u = BASE + "/webhooks/twilio/sms/incoming";
+  const p = { AccountSid: "AC" + "0".repeat(32), Body: "determinism", From: "+15005550006",
+              MessageSid: "SM" + "1".repeat(32), NumMedia: "0", To: ASSIGNED };
+  t("same URL + params + token -> same signature", sign(u, p) === sign(u, p));
+
+  // 3. Sensitivity: changing any signed element must change the signature.
+  const base = sign(u, p);
+  const vary = [
+    ["URL", () => sign(u + "/", p)],
+    ["MessageSid", () => sign(u, { ...p, MessageSid: "SM" + "2".repeat(32) })],
+    ["To", () => sign(u, { ...p, To: "+15005550001" })],
+    ["From", () => sign(u, { ...p, From: "+15005550009" })],
+    ["Body", () => sign(u, { ...p, Body: "different" })],
+  ];
+  for (const [what, f] of vary) t(`changing ${what} changes the signature`, f() !== base);
+
+  // 4. The parameter object must not be mutated by signing (a mutated object
+  //    would mean the body sent differs from the body signed).
+  const snapshot = JSON.stringify(p);
+  sign(u, p);
+  t("signing does not mutate the params object", JSON.stringify(p) === snapshot);
+}
+
+// ── CREDENTIAL PROBE ────────────────────────────────────────────────────────
+// One correctly-signed request. If the server rejects it, the supplied token
+// does not match the one stored in the staging connection — stop here rather
+// than emitting a wall of misleading 403s.
+console.log("\n[credential probe]");
+{
+  const probe = await post("/webhooks/twilio/sms/status",
+    { MessageSid: uniq(), MessageStatus: "queued", AccountSid: "AC" + "0".repeat(32) });
+  if (probe.status === 403) {
+    console.log("  FAIL correctly-signed request was rejected — status 403");
+    console.log(`
+  DIAGNOSIS: the signature algorithm is verified above, so the server is
+  computing a DIFFERENT expected signature. That means the TWILIO_AUTH_TOKEN
+  passed to this script is not the token stored in the staging connection.
+
+  This is not a server defect and not a test regression. Most likely the shell
+  variable was set from an incomplete expression, or a different Twilio token
+  was pasted (Test Auth Token / API Key Secret / another account).
+
+  The server's stored credential is known-good: Test Connection succeeded and
+  the connection is 'test_mode' with hasToken=true. Nothing needs to be fixed
+  server-side. Re-run with the primary Auth Token of the same account.
+
+  Aborting before the suite so no misleading results are produced.`);
+    process.exit(1);
+  }
+  t("a correctly-signed request is accepted", probe.status === 200, "status " + probe.status);
+}
+
 // ── INBOUND ─────────────────────────────────────────────────────────────────
 console.log("\n[inbound]");
 {

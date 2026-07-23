@@ -138,6 +138,16 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
     const newApiSecret = (input.apiKeySecret ?? "").toString().trim();
     if (newApiSecret) row.api_key_secret_encrypted = crypto.encryptSecret(newApiSecret);
 
+    // Did an identifying CREDENTIAL actually change? Changing the Account SID or
+    // the Auth Token invalidates any previous verification: the stored pair may
+    // no longer be a matching, working credential. If we left status at
+    // 'connected'/'test_mode', a mismatched SID (e.g. written by a stray
+    // /connect) would keep reporting a healthy connection while a real send
+    // would fail. So a credential change ALWAYS forces re-verification.
+    const sidChanged = row.account_sid !== undefined && row.account_sid !== (existing?.account_sid ?? null);
+    const tokenChanged = !!newToken;
+    const credentialChanged = sidChanged || tokenChanged;
+
     if (existing) {
       const { error } = await supabase.from("twilio_connections").update(row).eq("integration_id", integ.id);
       if (error) throw new Error("twilio-store: cannot update connection");
@@ -153,7 +163,11 @@ export function createTwilioStore({ supabase, environment = "staging", crypto = 
     // administrator's Disconnect may set 'disconnected'.
     const after = await _loadConnectionRow(integ.id);
     const complete = !!(after?.account_sid && after?.auth_token_encrypted);
-    if (complete && integ.status !== "connected" && integ.status !== "test_mode") {
+    const alreadyVerified = integ.status === "connected" || integ.status === "test_mode";
+    // Move to 'saved' when: the connection just became complete for the first
+    // time, OR an identifying credential changed under a previously-verified
+    // connection (which must be re-tested before it can be trusted again).
+    if (complete && (!alreadyVerified || credentialChanged)) {
       const { error: dbError } = await supabase.from("app_integrations")
         .update({ status: "saved", enabled: false, last_error: null, updated_at: nowISO })
         .eq("id", integ.id);

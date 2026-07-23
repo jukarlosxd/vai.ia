@@ -419,5 +419,51 @@ await t("D-OWN-3: releasing a number lets a different tenant claim it", async ()
   assert.equal(b.tenantSlug, "staging-beta");
 });
 
+// D-REVERIFY: changing an identifying credential must invalidate a prior
+// verification. A stray /connect that overwrote the Account SID once left the
+// integration reporting 'test_mode' with a mismatched SID — a real send would
+// then fail while the UI looked healthy.
+await t("D-REVERIFY-1: changing the Account SID resets a verified connection to 'saved'", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC" + "9".repeat(30) + "9a61", authToken: "tok" });
+  await s.setConnectionStatus({ status: "test_mode" });
+  let v = await s.getConnection();
+  assert.equal(v.status, "test_mode");
+  // a different Account SID arrives (token left blank → kept)
+  await s.saveConnection({ accountSid: "AC" + "0".repeat(32) });
+  v = await s.getConnection();
+  assert.equal(v.status, "saved", "a changed SID must force re-verification");
+  assert.equal(v.connected, false);
+  assert.equal(v.hasToken, true, "the stored token is preserved");
+});
+
+await t("D-REVERIFY-2: a new Auth Token also forces re-verification", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC" + "1".repeat(34 - 2), authToken: "tok1" });
+  await s.setConnectionStatus({ status: "connected" });
+  await s.saveConnection({ authToken: "tok2" });     // same SID, new token
+  const v = await s.getConnection();
+  assert.equal(v.status, "saved");
+});
+
+await t("D-REVERIFY-3: a non-credential save (toggle testMode) does NOT reset a verified connection", async () => {
+  const s = mk();
+  await s.saveConnection({ accountSid: "AC" + "2".repeat(34 - 2), authToken: "tok" });
+  await s.setConnectionStatus({ status: "test_mode" });
+  await s.saveConnection({ testMode: true });        // no SID, no token
+  const v = await s.getConnection();
+  assert.equal(v.status, "test_mode", "toggling config must not force a re-test");
+});
+
+await t("D-REVERIFY-4: re-saving the SAME SID with a blank token keeps the verified status", async () => {
+  const s = mk();
+  const sid = "AC" + "3".repeat(34 - 2);
+  await s.saveConnection({ accountSid: sid, authToken: "tok" });
+  await s.setConnectionStatus({ status: "test_mode" });
+  await s.saveConnection({ accountSid: sid });        // identical SID, blank token
+  const v = await s.getConnection();
+  assert.equal(v.status, "test_mode", "an unchanged SID is not a credential change");
+});
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
